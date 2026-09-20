@@ -96,6 +96,14 @@ in
       environment = {
         CURL_CA_BUNDLE = cfg.security.pki.caBundle;
       }
+      // (lib.optionalAttrs
+        (cfg.services.comin.niks3 != null && cfg.services.comin.niks3.aws_credentials_file != "")
+        {
+          # Root's nix-store may open the local store directly, bypassing the
+          # daemon. Both paths must see the same read-only AWS profile file.
+          AWS_SHARED_CREDENTIALS_FILE = cfg.services.comin.niks3.aws_credentials_file;
+        }
+      )
       // cfg.networking.proxy.envVars
       // (lib.optionalAttrs (cfg.services.comin.submodules && remoteWithAuth != null) {
         GIT_ASKPASS = gitAskpass;
