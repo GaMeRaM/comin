@@ -2,7 +2,6 @@ package config
 
 import (
 	"fmt"
-	"net/url"
 	"os"
 	"path/filepath"
 	"runtime"
@@ -56,12 +55,8 @@ func Read(path string) (config types.Configuration, err error) {
 		if len(config.Remotes) != 0 {
 			return config, fmt.Errorf("choose either niks3 or Git remotes")
 		}
-		u, err := url.Parse(n.URL)
-		if err != nil || u.Host == "" || (u.Scheme != "https" && u.Scheme != "http") || u.User != nil || u.Fragment != "" {
-			return config, fmt.Errorf("niks3.url must be an HTTP(S) pin URL")
-		}
-		if n.NetrcFile != "" && u.Scheme != "https" {
-			return config, fmt.Errorf("niks3.netrc_file requires an HTTPS pin URL")
+		if _, err := n.ParseURL(); err != nil {
+			return config, err
 		}
 		if n.Timeout == 0 {
 			n.Timeout = 10

@@ -5,12 +5,17 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"net/url"
 	"os"
 	"strings"
 	"sync"
 	"sync/atomic"
 	"time"
 
+	"github.com/aws/aws-sdk-go-v2/aws"
+	awsconfig "github.com/aws/aws-sdk-go-v2/config"
+	"github.com/aws/aws-sdk-go-v2/credentials"
+	"github.com/aws/aws-sdk-go-v2/service/s3"
 	"github.com/jdx/go-netrc"
 	"github.com/nlewo/comin/internal/broker"
 	"github.com/nlewo/comin/internal/types"
@@ -70,42 +75,30 @@ func (f *Niks3Fetcher) GetState() *protobuf.Fetcher {
 	}
 }
 
+// ReadNiks3Pin is also used by the installer; no running agent is required.
+func ReadNiks3Pin(ctx context.Context, config types.Niks3Fetcher) (string, error) {
+	return NewNiks3Fetcher(config, nil).fetch(ctx)
+}
+
 func (f *Niks3Fetcher) fetch(ctx context.Context) (string, error) {
-	req, err := http.NewRequestWithContext(ctx, http.MethodGet, f.config.URL, nil)
+	u, err := f.config.ParseURL()
 	if err != nil {
 		return "", err
 	}
-	req.Header.Set("Cache-Control", "no-cache")
-	if f.config.NetrcFile != "" {
-		if req.URL.Scheme != "https" {
-			return "", fmt.Errorf("pin credentials require HTTPS")
-		}
-		// Read on every poll so rotating the shared Nix/Comin read credential
-		// does not require restarting the agent. Never log file contents.
-		data, err := os.ReadFile(f.config.NetrcFile)
-		if err != nil {
-			return "", fmt.Errorf("cannot read pin netrc file")
-		}
-		n, err := netrc.ParseString(string(data))
-		if err != nil {
-			return "", fmt.Errorf("cannot parse pin netrc file")
-		}
-		m := n.Machine(req.URL.Hostname())
-		if m == nil || m.Get("login") == "" || m.Get("password") == "" {
-			return "", fmt.Errorf("pin netrc file has no login/password for the pin host")
-		}
-		req.SetBasicAuth(m.Get("login"), m.Get("password"))
+	ctx, cancel := context.WithTimeout(ctx, time.Duration(f.config.Timeout)*time.Second)
+	defer cancel()
+	var reader io.ReadCloser
+	if u.Scheme == "s3" {
+		reader, err = f.fetchS3(ctx, u)
+	} else {
+		reader, err = f.fetchHTTP(ctx)
 	}
-	resp, err := f.client.Do(req)
 	if err != nil {
 		return "", err
 	}
-	defer resp.Body.Close()
-	if resp.StatusCode != http.StatusOK {
-		return "", fmt.Errorf("pin request: HTTP %d", resp.StatusCode)
-	}
+	defer reader.Close()
 	const limit = 4096
-	body, err := io.ReadAll(io.LimitReader(resp.Body, limit+1))
+	body, err := io.ReadAll(io.LimitReader(reader, limit+1))
 	if err != nil {
 		return "", err
 	}
@@ -117,6 +110,79 @@ func (f *Niks3Fetcher) fetch(ctx context.Context) (string, error) {
 		return "", err
 	}
 	return outPath, nil
+}
+
+func (f *Niks3Fetcher) fetchS3(ctx context.Context, u *url.URL) (io.ReadCloser, error) {
+	q := u.Query()
+	profile := q.Get("profile")
+	if profile == "" {
+		profile = "default"
+	}
+	region := q.Get("region")
+	if region == "" {
+		region = "us-east-1"
+	}
+	// A fresh provider on each poll observes credential rotation. Explicit file
+	// selection prevents falling back to a more privileged ambient AWS identity.
+	shared, err := awsconfig.LoadSharedConfigProfile(ctx, profile, func(o *awsconfig.LoadSharedConfigOptions) {
+		o.CredentialsFiles = []string{f.config.AWSCredentialsFile}
+		o.ConfigFiles = []string{}
+	})
+	value := shared.Credentials
+	if err != nil || value.AccessKeyID == "" || value.SecretAccessKey == "" {
+		return nil, fmt.Errorf("cannot read S3 pin credentials for the selected profile")
+	}
+	client := s3.NewFromConfig(aws.Config{
+		Region: region, HTTPClient: f.client,
+		Credentials: credentials.NewStaticCredentialsProvider(value.AccessKeyID, value.SecretAccessKey, value.SessionToken),
+	}, func(o *s3.Options) {
+		o.BaseEndpoint = aws.String("https://" + q.Get("endpoint"))
+		o.UsePathStyle = true
+	})
+	object, err := client.GetObject(ctx, &s3.GetObjectInput{
+		Bucket: aws.String(u.Host), Key: aws.String(strings.TrimPrefix(u.Path, "/")),
+	})
+	if err != nil {
+		return nil, err
+	}
+	return object.Body, nil
+}
+
+func (f *Niks3Fetcher) fetchHTTP(ctx context.Context) (io.ReadCloser, error) {
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, f.config.URL, nil)
+	if err != nil {
+		return nil, err
+	}
+	req.Header.Set("Cache-Control", "no-cache")
+	if f.config.NetrcFile != "" {
+		if req.URL.Scheme != "https" {
+			return nil, fmt.Errorf("pin credentials require HTTPS")
+		}
+		// Read on every poll so rotating the shared Nix/Comin read credential
+		// does not require restarting the agent. Never log file contents.
+		data, err := os.ReadFile(f.config.NetrcFile)
+		if err != nil {
+			return nil, fmt.Errorf("cannot read pin netrc file")
+		}
+		n, err := netrc.ParseString(string(data))
+		if err != nil {
+			return nil, fmt.Errorf("cannot parse pin netrc file")
+		}
+		m := n.Machine(req.URL.Hostname())
+		if m == nil || m.Get("login") == "" || m.Get("password") == "" {
+			return nil, fmt.Errorf("pin netrc file has no login/password for the pin host")
+		}
+		req.SetBasicAuth(m.Get("login"), m.Get("password"))
+	}
+	resp, err := f.client.Do(req)
+	if err != nil {
+		return nil, err
+	}
+	if resp.StatusCode != http.StatusOK {
+		resp.Body.Close()
+		return nil, fmt.Errorf("pin request: HTTP %d", resp.StatusCode)
+	}
+	return resp.Body, nil
 }
 
 func (f *Niks3Fetcher) Start(ctx context.Context) {

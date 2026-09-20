@@ -58,6 +58,16 @@ in
                   outside the Nix store and readable only by root.
                 '';
               };
+              aws_credentials_file = mkOption {
+                type = str;
+                default = "";
+                description = ''
+                  Runtime AWS credentials file for private s3://bucket/pins/name
+                  URLs. Supports endpoint, scheme=https, region and profile query
+                  parameters. Provision outside the Nix store. Set the same file
+                  as AWS_SHARED_CREDENTIALS_FILE for nix-daemon.
+                '';
+              };
               poller.period = mkOption {
                 type = ints.positive;
                 default = 60;

@@ -7,8 +7,8 @@ import (
 	"time"
 
 	"github.com/nlewo/comin/internal/broker"
-	"github.com/nlewo/comin/pkg/protobuf"
 	"github.com/nlewo/comin/internal/store"
+	"github.com/nlewo/comin/pkg/protobuf"
 	"github.com/stretchr/testify/assert"
 )
 
@@ -154,12 +154,12 @@ func TestDeployerSuspend(t *testing.T) {
 		},
 	}, "test", false, "")
 	assert.EventuallyWithT(t, func(c *assert.CollectT) {
-		assert.True(t, d.RunnerIsSuspended())
+		assert.True(c, d.RunnerIsSuspended())
 	}, 3*time.Second, 100*time.Millisecond)
 
 	d.Resume()
 	assert.EventuallyWithT(t, func(c *assert.CollectT) {
-		assert.False(t, d.RunnerIsSuspended())
-		assert.True(t, d.IsDeploying())
+		assert.False(c, d.RunnerIsSuspended())
+		assert.True(c, d.IsDeploying())
 	}, 3*time.Second, 100*time.Millisecond)
 }

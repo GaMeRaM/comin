@@ -163,6 +163,8 @@ func TestBuild(t *testing.T) {
 		assert.False(c, m.Builder.State().IsEvaluating.GetValue())
 		assert.False(c, m.Builder.State().IsBuilding.GetValue())
 		g, _ := m.storage.GenerationGet(m.Builder.GenerationUuid)
+		assert.Equal(c, "id-3", g.GetSource().GetGit().GetSelectedCommitId())
+		assert.Equal(c, "built", g.GetBuildStatus())
 		assert.Empty(c, g.BuildErr)
 	}, 5*time.Second, 100*time.Millisecond)
 
@@ -178,6 +180,8 @@ func TestBuild(t *testing.T) {
 		assert.False(c, m.Builder.State().IsEvaluating.GetValue())
 		assert.False(c, m.Builder.State().IsBuilding.GetValue())
 		g, _ := m.storage.GenerationGet(m.Builder.GenerationUuid)
+		assert.Equal(c, "id-4", g.GetSource().GetGit().GetSelectedCommitId())
+		assert.Equal(c, "built", g.GetBuildStatus())
 		assert.Empty(c, g.BuildErr)
 	}, 5*time.Second, 100*time.Millisecond)
 
@@ -222,7 +226,7 @@ func TestDeploy(t *testing.T) {
 	assert.False(t, m.Builder.State().IsBuilding.GetValue())
 	m.deployer.Submit(&protobuf.Generation{}, "test", false, "")
 	assert.EventuallyWithT(t, func(c *assert.CollectT) {
-		assert.Equal(c, "profile-path", m.deployer.State().Deployment.ProfilePath)
+		assert.Equal(c, "profile-path", m.deployer.State().GetDeployment().GetProfilePath())
 	}, 5*time.Second, 100*time.Millisecond)
 
 }

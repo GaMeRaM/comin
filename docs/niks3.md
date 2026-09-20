@@ -43,3 +43,35 @@ This does not provide automatic rollback after a failed activation, recovery
 of an interrupted activation, or data migration rollback. The deployment
 logic remains Comin's existing NixOS executor. Interactive desktop changes
 from PR #184 and related branches are independent of this work.
+
+## Private S3 pins
+
+Use an S3 URL with a runtime AWS credentials file shared with Nix:
+
+```nix
+services.comin.niks3 = {
+  url = "s3://fleet-cache/pins/pilot-device?endpoint=s3.example.org&scheme=https&region=us-east-1&profile=fleet-cache";
+  aws_credentials_file = "/etc/fleet-cache.aws";
+};
+systemd.services.nix-daemon.environment.AWS_SHARED_CREDENTIALS_FILE = "/etc/fleet-cache.aws";
+nix.settings.substituters = [
+  "s3://fleet-cache?endpoint=s3.example.org&scheme=https&region=us-east-1&profile=fleet-cache"
+];
+```
+
+Provision the credentials file separately (root, mode 0600), outside the Nix
+store. It uses standard `[fleet-cache]`, `aws_access_key_id`, and
+`aws_secret_access_key` fields. Only the configured file/profile is read; ambient
+AWS credentials are never used. AWS SDK for Go v2 handles signing and S3 reads.
+The file is read on every poll to support rotation. HTTPS is required.
+
+Installers can use the same validated reader without a running Comin agent:
+
+```sh
+comin pin 's3://fleet-cache/pins/pilot-device?endpoint=s3.example.org&profile=fleet-cache' \
+  --aws-credentials-file /run/credentials/cache.aws
+```
+
+The command prints a single validated output store path. Nix still must verify
+the cache signature when downloading it. A pin selects a release; it does not
+replace artifact signature verification.
