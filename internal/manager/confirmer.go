@@ -73,6 +73,12 @@ type Command struct {
 	uuid   string
 }
 
+// Mode is immutable after construction. Reading it must not wait for the
+// confirmer, which may itself be waiting for the manager to accept approval.
+func (c *Confirmer) Mode() Mode {
+	return Mode(c.state.Mode)
+}
+
 func (c *Confirmer) status() *protobuf.Confirmer {
 	c.statusReq <- struct{}{}
 	return <-c.statusResp

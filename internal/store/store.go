@@ -4,6 +4,7 @@ import (
 	"errors"
 	"fmt"
 	"os"
+	"path/filepath"
 	"sync"
 
 	"github.com/google/uuid"
@@ -13,6 +14,7 @@ import (
 	"github.com/nlewo/comin/pkg/protobuf"
 	"github.com/sirupsen/logrus"
 	"google.golang.org/protobuf/encoding/protojson"
+	"google.golang.org/protobuf/proto"
 )
 
 type Store struct {
@@ -71,7 +73,7 @@ func New(broker *broker.Broker, filename, gcRootsDir string, bootEntryCapacity, 
 func (s *Store) GetState() *protobuf.Store {
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	return s.persisted
+	return proto.CloneOf(s.persisted)
 }
 
 func (s *Store) DeploymentList() []*protobuf.Deployment {
@@ -234,6 +236,14 @@ func (s *Store) migrateGenerationsToSource() {
 }
 
 func (s *Store) Commit() {
+	if err := s.commit(); err != nil {
+		logrus.Errorf("store: cannot commit %s: %s", s.filename, err)
+	}
+}
+
+// commit is called with mu held (or during startup, before workers start).
+// Replace the complete snapshot atomically, then make the rename durable.
+func (s *Store) commit() error {
 	marshaler := protojson.MarshalOptions{
 		UseProtoNames:   true,
 		EmitUnpopulated: true,
@@ -241,13 +251,35 @@ func (s *Store) Commit() {
 	}
 	buf, err := marshaler.Marshal(s.persisted)
 	if err != nil {
-		logrus.Errorf("store: cannot marshal store.data: %s", err)
-		return
+		return err
 	}
-	err = os.WriteFile(s.filename, buf, 0644)
+	f, err := os.CreateTemp(filepath.Dir(s.filename), ".comin-state-*")
 	if err != nil {
-		logrus.Errorf("store: cannot write store.data to %s: %s", s.filename, err)
+		return err
 	}
+	defer os.Remove(f.Name()) // nolint: errcheck
+	defer f.Close()           // nolint: errcheck
+	if err := f.Chmod(0644); err != nil {
+		return err
+	}
+	if _, err := f.Write(buf); err != nil {
+		return err
+	}
+	if err := f.Sync(); err != nil {
+		return err
+	}
+	if err := f.Close(); err != nil {
+		return err
+	}
+	if err := os.Rename(f.Name(), s.filename); err != nil {
+		return err
+	}
+	dir, err := os.Open(filepath.Dir(s.filename))
+	if err != nil {
+		return err
+	}
+	defer dir.Close() // nolint: errcheck
+	return dir.Sync()
 }
 
 func (s *Store) compareAndLogCapacities(old, new *protobuf.Store) {

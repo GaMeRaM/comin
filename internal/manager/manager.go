@@ -161,8 +161,11 @@ func (m *Manager) Resume(ctx context.Context) error {
 // generation on a channel which is consumed by the deployer.
 func (m *Manager) FetchAndBuild(ctx context.Context) {
 	go func() {
+		m.restorePendingDeployment()
 		for {
 			select {
+			case <-ctx.Done():
+				return
 			case e := <-m.brokerEvents:
 				if fetched := e.GetFetched(); fetched != nil {
 					if !fetched.Updated {
@@ -209,6 +212,12 @@ func (m *Manager) FetchAndBuild(ctx context.Context) {
 					logrus.Infof("manager: a generation is available for deployment with commit %s", git.SelectedCommitId)
 					operation := m.getOperationFromConfigurationOperations(git.SelectedRemoteName, git.SelectedBranchName)
 					if !m.deployer.IsAlreadyDeployed(&generation, operation) {
+						if m.DeployConfirmer.Mode() == Manual {
+							if err := m.storage.SetPendingDeployment(generationUUID, operation); err != nil {
+								logrus.Errorf("manager: cannot persist pending deployment: %s", err)
+								continue
+							}
+						}
 						m.DeployConfirmer.Submit(generationUUID)
 					}
 				} else {
@@ -222,11 +231,53 @@ func (m *Manager) FetchAndBuild(ctx context.Context) {
 				}
 				git := generation.Source.GetGit()
 				operation := m.getOperationFromConfigurationOperations(git.SelectedRemoteName, git.SelectedBranchName)
+				if m.DeployConfirmer.Mode() == Manual {
+					pending, savedOperation, err := m.storage.PendingDeployment()
+					if err != nil || pending == nil || pending.Uuid != generationUUID || savedOperation != operation {
+						logrus.Errorf("manager: confirmation does not match the persisted pending deployment: %s", generationUUID)
+						continue
+					}
+				}
 				reason := fmt.Sprintf("The generation %s needs to be deployed", generationUUID)
 				m.deployer.Submit(&generation, operation, false, reason)
 			}
 		}
 	}()
+}
+
+// Restore only an unconsumed manual proposal. Neither approval nor an
+// interrupted deployment is replayed automatically after a restart.
+func (m *Manager) restorePendingDeployment() {
+	g, operation, err := m.storage.PendingDeployment()
+	if err != nil {
+		logrus.Errorf("manager: cannot restore pending deployment: %s", err)
+		return
+	}
+	if g == nil {
+		return
+	}
+	git := g.Source.GetGit()
+	valid := m.DeployConfirmer.Mode() == Manual &&
+		g.BuildStatus == store.Built.String() && g.BuildErr == "" && g.OutPath != "" &&
+		(g.MachineId == "" || g.MachineId == m.machineId) &&
+		git != nil && git.Hostname == m.Builder.GetHostname() &&
+		m.configurationOperations[git.SelectedRemoteName][git.SelectedBranchName] == operation && operation != "" &&
+		m.executor.IsStorePathExist(g.OutPath)
+	// A deployment record means this approval was already consumed, even
+	// if Comin stopped before recording the final activation result.
+	for _, d := range m.storage.GetState().Deployments {
+		if d.Generation.GetUuid() == g.Uuid {
+			valid = false
+		}
+	}
+	if !valid || m.deployer.IsAlreadyDeployed(g, operation) {
+		if err := m.storage.ClearPendingDeployment(g.Uuid); err != nil {
+			logrus.Errorf("manager: cannot clear pending deployment: %s", err)
+		}
+		return
+	}
+	logrus.Infof("manager: restoring manual confirmation for generation %s", g.Uuid)
+	m.DeployConfirmer.Submit(g.Uuid)
 }
 
 // ConfigurationOperations is a map describing the operation associated
@@ -261,9 +312,14 @@ func (m *Manager) Run(ctx context.Context) {
 
 	for {
 		select {
+		case <-ctx.Done():
+			return
 		case <-m.stateRequestCh:
 			m.stateResultCh <- m.toState()
 		case dpl := <-m.deployer.DeploymentDoneCh:
+			if err := m.storage.ClearPendingDeployment(dpl.Generation.Uuid); err != nil {
+				logrus.Errorf("manager: cannot clear completed pending deployment: %s", err)
+			}
 			m.needToReboot = m.executor.NeedToReboot(dpl.Generation.OutPath, dpl.Operation)
 			if m.needToReboot {
 				e := &protobuf.Event_RebootRequired{Deployment: dpl}

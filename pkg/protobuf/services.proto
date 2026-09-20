@@ -301,4 +301,7 @@ message Store {
   int32 deployment_boot_entry_capacity = 9;
   int32 deployment_successful_capacity = 10;
   int32 deployment_any_capacity = 11;
+  // A prepared manual deployment, persisted before asking the operator.
+  string pending_deployment_uuid = 12;
+  string pending_deployment_operation = 13;
 }
