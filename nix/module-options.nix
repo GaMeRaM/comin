@@ -35,6 +35,37 @@ in
     with types;
     {
       services.comin = {
+        niks3 = mkOption {
+          default = null;
+          description = "Follow one niks3 S3 pin instead of a Git repository (NixOS only).";
+          type = nullOr (submodule {
+            options = {
+              url = mkOption {
+                type = str;
+                description = "URL of the plain-text S3 object pins/<channel>; use HTTPS outside isolated tests.";
+              };
+              timeout = mkOption {
+                type = ints.positive;
+                default = 10;
+                description = "Pin request timeout in seconds.";
+              };
+              poller.period = mkOption {
+                type = ints.positive;
+                default = 60;
+                description = "Channel polling interval in seconds.";
+              };
+              operation = mkOption {
+                type = enum [
+                  "switch"
+                  "boot"
+                  "test"
+                ];
+                default = "switch";
+                description = "Operation after deployment confirmation.";
+              };
+            };
+          });
+        };
         enable = mkOption {
           type = types.bool;
           default = false;

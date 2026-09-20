@@ -29,6 +29,10 @@ in
   config = lib.mkIf cfg.services.comin.enable {
     assertions = [
       {
+        assertion = cfg.services.comin.niks3 == null || cfg.services.comin.remotes == [ ];
+        message = "comin: choose either niks3 or Git remotes.";
+      }
+      {
         assertion = package != null;
         message = "`services.comin.package` cannot be null.";
       }

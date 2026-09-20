@@ -1,6 +1,7 @@
 package manager
 
 import (
+	"strings"
 	"testing"
 	"time"
 
@@ -20,7 +21,7 @@ type pendingExecutor struct {
 func (e pendingExecutor) IsStorePathExist(string) bool { return e.exists }
 
 func TestRestorePendingManualDeployment(t *testing.T) {
-	for _, scenario := range []string{"ready", "missing artifact", "different machine", "changed operation", "auto mode", "already attempted"} {
+	for _, scenario := range []string{"niks3 ready", "niks3 changed channel", "niks3 changed hostname", "ready", "missing artifact", "different machine", "changed operation", "auto mode", "already attempted"} {
 		t.Run(scenario, func(t *testing.T) {
 			bk := broker.New()
 			bk.Start()
@@ -30,6 +31,9 @@ func TestRestorePendingManualDeployment(t *testing.T) {
 			g := s.NewGeneration("device", ".", "", &protobuf.GitRepositoryStatus{
 				SelectedRemoteName: "origin", SelectedBranchName: "main", SelectedCommitId: "release-b",
 			})
+			if strings.HasPrefix(scenario, "niks3") {
+				g = s.NewNiks3Generation("device", "https://cache/pins/device", "/nix/store/release-b")
+			}
 			assert.NoError(t, s.GenerationEvalFinished(g.Uuid, "drv", "/nix/store/release-b", "device-id", nil))
 			assert.NoError(t, s.GenerationBuildStart(g.Uuid, "test"))
 			assert.NoError(t, s.GenerationBuildFinished(g.Uuid, nil))
@@ -56,6 +60,15 @@ func TestRestorePendingManualDeployment(t *testing.T) {
 				deployer: deployer.New(s, nil, nil, "", bk), DeployConfirmer: c,
 				configurationOperations: ConfigurationOperations{"origin": {"main": "switch"}},
 			}
+			if strings.HasPrefix(scenario, "niks3") {
+				m.configurationOperations = ConfigurationOperations{"https://cache/pins/device": {"": "switch"}}
+			}
+			if scenario == "niks3 changed channel" {
+				m.configurationOperations = ConfigurationOperations{"https://cache/pins/other": {"": "switch"}}
+			}
+			if scenario == "niks3 changed hostname" {
+				m.Builder = builder.New(s, e, bk, "", "", "", "other", false, time.Second, time.Second)
+			}
 			if scenario == "different machine" {
 				m.machineId = "other-device"
 			}
@@ -63,7 +76,7 @@ func TestRestorePendingManualDeployment(t *testing.T) {
 				m.configurationOperations["origin"]["main"] = "boot"
 			}
 			m.restorePendingDeployment()
-			if scenario == "ready" {
+			if scenario == "ready" || scenario == "niks3 ready" {
 				assert.Equal(t, g.Uuid, c.status().Submitted)
 				assert.Empty(t, c.status().Confirmed)
 				assert.Nil(t, m.deployer.State().GenerationToDeploy)

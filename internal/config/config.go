@@ -2,8 +2,10 @@ package config
 
 import (
 	"fmt"
+	"net/url"
 	"os"
 	"path/filepath"
+	"runtime"
 	"slices"
 	"strings"
 
@@ -47,6 +49,33 @@ func Read(path string) (config types.Configuration, err error) {
 
 	}
 
+	if n := config.Niks3; n != nil {
+		if runtime.GOOS != "linux" {
+			return config, fmt.Errorf("niks3 currently supports NixOS only")
+		}
+		if len(config.Remotes) != 0 {
+			return config, fmt.Errorf("choose either niks3 or Git remotes")
+		}
+		u, err := url.Parse(n.URL)
+		if err != nil || u.Host == "" || (u.Scheme != "https" && u.Scheme != "http") || u.User != nil || u.Fragment != "" {
+			return config, fmt.Errorf("niks3.url must be an HTTP(S) pin URL")
+		}
+		if n.Timeout == 0 {
+			n.Timeout = 10
+		}
+		if n.Poller.Period == 0 {
+			n.Poller.Period = 60
+		}
+		if n.Timeout < 0 || n.Poller.Period < 0 {
+			return config, fmt.Errorf("niks3 timeout and poll period must be positive")
+		}
+		if n.Operation == "" {
+			n.Operation = "switch"
+		}
+		if !slices.Contains([]string{"switch", "boot", "test"}, n.Operation) {
+			return config, fmt.Errorf("invalid niks3 operation %q", n.Operation)
+		}
+	}
 	if config.ApiServer.ListenAddress == "" {
 		config.ApiServer.ListenAddress = "127.0.0.1"
 	}
@@ -66,7 +95,7 @@ func Read(path string) (config types.Configuration, err error) {
 		config.RepositorySubdir = "."
 	}
 	supportedRepositoryTypes := []string{"flake", "nix"}
-	if !slices.Contains(supportedRepositoryTypes, config.RepositoryType) {
+	if config.Niks3 == nil && !slices.Contains(supportedRepositoryTypes, config.RepositoryType) {
 		return config, fmt.Errorf("config: repository type is '%s' while it be one of '%s'", config.RepositoryType, supportedRepositoryTypes)
 	}
 	if config.Grpc.UnixSocketPath == "" {

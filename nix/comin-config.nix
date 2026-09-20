@@ -28,6 +28,9 @@ rec {
     eval_timeout = cfg.services.comin.evalTimeout;
     build_timeout = cfg.services.comin.buildTimeout;
   }
+  // (lib.optionalAttrs (cfg.services.comin.niks3 != null) {
+    niks3 = cfg.services.comin.niks3;
+  })
   // (lib.optionalAttrs (cfg.services.comin.sshAllowedSignersPath != null) {
     ssh_allowed_signers_path = cfg.services.comin.sshAllowedSignersPath;
   })

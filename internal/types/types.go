@@ -71,9 +71,10 @@ type Retention struct {
 }
 
 type Configuration struct {
-	Hostname      string `yaml:"hostname"`
-	StateDir      string `yaml:"state_dir"`
-	StateFilepath string `yaml:"state_filepath"`
+	Niks3         *Niks3Fetcher `yaml:"niks3"`
+	Hostname      string        `yaml:"hostname"`
+	StateDir      string        `yaml:"state_dir"`
+	StateFilepath string        `yaml:"state_filepath"`
 	// RepositoryType describes type of the repository. It can currently only be "flake"
 	RepositoryType        string     `yaml:"repository_type"`
 	RepositorySubdir      string     `yaml:"repository_subdir"`

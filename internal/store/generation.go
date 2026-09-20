@@ -130,9 +130,26 @@ func (s *Store) NewGeneration(hostname, repositoryDir, systemAttr string, rs *pr
 	return
 }
 
+func (s *Store) NewNiks3Generation(hostname, pinURL, outPath string) (g protobuf.Generation) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	g = protobuf.Generation{
+		Uuid: uuid.New().String(),
+		Source: &protobuf.Source{Source: &protobuf.Source_Niks3{Niks3: &protobuf.Niks3{
+			Hostname: hostname, PinUrl: pinURL, StorePath: outPath,
+		}}},
+		EvalStatus: EvalInit.String(), BuildStatus: BuildInit.String(),
+	}
+	s.persisted.Generations = append(s.persisted.Generations, &g)
+	return
+}
+
 func GenerationShow(g *protobuf.Generation) {
 	padding := "    "
 	fmt.Printf("%sGeneration UUID %s\n", padding, g.Uuid)
+	if pin := g.Source.GetNiks3(); pin != nil {
+		fmt.Printf("%sPin %s\n%sStore path %s\n", padding, pin.PinUrl, padding, pin.StorePath)
+	}
 	if g.Source != nil && g.Source.GetGit() != nil {
 		git := g.Source.GetGit()
 		fmt.Printf("%sCommit ID %s from %s/%s\n", padding, git.SelectedCommitId, git.SelectedRemoteName, git.SelectedBranchName)

@@ -133,6 +133,15 @@ func Subscribe(broker *brokerPkg.Broker, metrics *Prometheus) {
 
 func updateFetched(fetched *protobuf.Event_Fetched, metrics *Prometheus) {
 	metrics.lastFetchFailed.Reset()
+	if pin := fetched.GetNiks3Status(); pin != nil {
+		failed := pin.FetchErrorMsg != ""
+		status := "succeeded"
+		if failed {
+			status = "failed"
+		}
+		metrics.IncFetchCounter(pin.PinUrl, status)
+		metrics.lastFetchFailed.With(prometheus.Labels{"remote_name": pin.PinUrl}).Set(boolToFloat64(failed))
+	}
 	for _, repo := range fetched.GetGitRepositoryStatus().GetRemotes() {
 		status := "failed"
 		success := repo.GetFetched().GetValue()

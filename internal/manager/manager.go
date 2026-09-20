@@ -42,7 +42,7 @@ type Manager struct {
 	prometheus      prometheus.Prometheus
 	storage         *store.Store
 	scheduler       scheduler.Scheduler
-	Fetcher         *fetcher.GitFetcher
+	Fetcher         fetcher.Fetcher
 	Builder         *builder.Builder
 	deployer        *deployer.Deployer
 	executor        executor.Executor
@@ -50,6 +50,8 @@ type Manager struct {
 	DeployConfirmer *Confirmer
 
 	configurationOperations ConfigurationOperations
+	// Owned by FetchAndBuild; used to ignore completion of a superseded pin.
+	niks3Target string
 
 	isSuspended bool
 
@@ -60,7 +62,7 @@ type Manager struct {
 func New(s *store.Store,
 	p prometheus.Prometheus,
 	sched scheduler.Scheduler,
-	fetcher *fetcher.GitFetcher,
+	fetcher fetcher.Fetcher,
 	builder *builder.Builder,
 	deployer *deployer.Deployer,
 	machineId string,
@@ -171,6 +173,10 @@ func (m *Manager) FetchAndBuild(ctx context.Context) {
 					if !fetched.Updated {
 						continue
 					}
+					if pin := fetched.GetNiks3Status(); pin != nil {
+						m.prepareNiks3(ctx, pin)
+						continue
+					}
 					rs := fetched.GetGitRepositoryStatus()
 					if fetched.Verified {
 						logrus.Infof("manager: a generation is evaluating for commit %s", rs.SelectedCommitId)
@@ -189,7 +195,7 @@ func (m *Manager) FetchAndBuild(ctx context.Context) {
 					logrus.Error(err)
 					continue
 				}
-				if generation.EvalErr != "" {
+				if generation.EvalErr != "" || m.superseded(&generation) {
 					continue
 				}
 				if generation.MachineId != "" && m.machineId != generation.MachineId {
@@ -208,9 +214,11 @@ func (m *Manager) FetchAndBuild(ctx context.Context) {
 					continue
 				}
 				if generation.BuildErr == "" {
-					git := generation.Source.GetGit()
-					logrus.Infof("manager: a generation is available for deployment with commit %s", git.SelectedCommitId)
-					operation := m.getOperationFromConfigurationOperations(git.SelectedRemoteName, git.SelectedBranchName)
+					if m.superseded(&generation) {
+						continue
+					}
+					logrus.Infof("manager: generation %s is available for deployment", generationUUID)
+					operation := m.operationForSource(generation.Source)
 					if !m.deployer.IsAlreadyDeployed(&generation, operation) {
 						if m.DeployConfirmer.Mode() == Manual {
 							if err := m.storage.SetPendingDeployment(generationUUID, operation); err != nil {
@@ -229,8 +237,7 @@ func (m *Manager) FetchAndBuild(ctx context.Context) {
 					logrus.Error(err)
 					continue
 				}
-				git := generation.Source.GetGit()
-				operation := m.getOperationFromConfigurationOperations(git.SelectedRemoteName, git.SelectedBranchName)
+				operation := m.operationForSource(generation.Source)
 				if m.DeployConfirmer.Mode() == Manual {
 					pending, savedOperation, err := m.storage.PendingDeployment()
 					if err != nil || pending == nil || pending.Uuid != generationUUID || savedOperation != operation {
@@ -256,12 +263,10 @@ func (m *Manager) restorePendingDeployment() {
 	if g == nil {
 		return
 	}
-	git := g.Source.GetGit()
 	valid := m.DeployConfirmer.Mode() == Manual &&
 		g.BuildStatus == store.Built.String() && g.BuildErr == "" && g.OutPath != "" &&
 		(g.MachineId == "" || g.MachineId == m.machineId) &&
-		git != nil && git.Hostname == m.Builder.GetHostname() &&
-		m.configurationOperations[git.SelectedRemoteName][git.SelectedBranchName] == operation && operation != "" &&
+		m.pendingSourceMatches(g.Source, operation) &&
 		m.executor.IsStorePathExist(g.OutPath)
 	// A deployment record means this approval was already consumed, even
 	// if Comin stopped before recording the final activation result.
@@ -278,6 +283,57 @@ func (m *Manager) restorePendingDeployment() {
 	}
 	logrus.Infof("manager: restoring manual confirmation for generation %s", g.Uuid)
 	m.DeployConfirmer.Submit(g.Uuid)
+}
+
+func (m *Manager) operationForSource(source *protobuf.Source) string {
+	if pin := source.GetNiks3(); pin != nil {
+		return m.configurationOperations[pin.PinUrl][""]
+	}
+	git := source.GetGit()
+	return m.getOperationFromConfigurationOperations(git.GetSelectedRemoteName(), git.GetSelectedBranchName())
+}
+
+func (m *Manager) pendingSourceMatches(source *protobuf.Source, operation string) bool {
+	if operation == "" {
+		return false
+	}
+	if pin := source.GetNiks3(); pin != nil {
+		return pin.Hostname == m.Builder.GetHostname() && m.configurationOperations[pin.PinUrl][""] == operation
+	}
+	git := source.GetGit()
+	return git != nil && git.Hostname == m.Builder.GetHostname() &&
+		m.configurationOperations[git.SelectedRemoteName][git.SelectedBranchName] == operation
+}
+
+func (m *Manager) superseded(g *protobuf.Generation) bool {
+	return g.Source.GetNiks3() != nil && g.Source.GetNiks3().StorePath != m.niks3Target
+}
+
+func (m *Manager) prepareNiks3(ctx context.Context, pin *protobuf.Niks3Status) {
+	operation := m.configurationOperations[pin.PinUrl][""]
+	if pin.FetchErrorMsg != "" || operation == "" {
+		return
+	}
+	m.niks3Target = pin.StorePath
+	current := m.Builder.State().Generation
+	if current != nil && current.Source.GetNiks3().GetStorePath() == pin.StorePath &&
+		current.EvalErr == "" && current.BuildErr == "" {
+		return // Includes a suspended download; let Resume continue it.
+	}
+	// A changed pin supersedes an unfinished download. Stop waits for it
+	// before another generation can use the same executor and staging root.
+	m.Builder.Stop()
+	if pending, savedOperation, err := m.storage.PendingDeployment(); err == nil && pending != nil &&
+		pending.Source.GetNiks3().GetPinUrl() == pin.PinUrl && pending.OutPath == pin.StorePath && savedOperation == operation {
+		return // Preserve the persisted UUID across online restarts too.
+	}
+	if last := m.deployer.State().Deployment; last != nil && last.Generation.OutPath == pin.StorePath && last.Operation == operation {
+		return // An already attempted installation needs explicit resubmission.
+	}
+	generation := m.storage.NewNiks3Generation(m.Builder.GetHostname(), pin.PinUrl, pin.StorePath)
+	if err := m.Builder.Eval(ctx, &generation); err != nil {
+		logrus.Error(err)
+	}
 }
 
 // ConfigurationOperations is a map describing the operation associated

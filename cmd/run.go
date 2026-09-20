@@ -18,6 +18,7 @@ import (
 	"github.com/nlewo/comin/internal/scheduler"
 	"github.com/nlewo/comin/internal/server"
 	storePkg "github.com/nlewo/comin/internal/store"
+	"github.com/nlewo/comin/internal/types"
 	"github.com/nlewo/comin/pkg/protobuf"
 	"github.com/sirupsen/logrus"
 	"github.com/spf13/cobra"
@@ -26,7 +27,9 @@ import (
 // getGitFromGeneration is a helper function to safely extract Git source from a Generation
 func getGitFromGeneration(g *protobuf.Generation) *protobuf.Git {
 	if g != nil && g.Source != nil {
-		return g.Source.GetGit()
+		if git := g.Source.GetGit(); git != nil {
+			return git
+		}
 	}
 	return &protobuf.Git{}
 }
@@ -61,7 +64,11 @@ var runCmd = &cobra.Command{
 		}
 
 		var executor executorPkg.Executor
-		executor, err = executorPkg.New(cfg.RepositoryType, gitConfig.Path, gitConfig.Submodules)
+		if cfg.Niks3 != nil {
+			executor = executorPkg.NewNiks3(cfg.StateDir)
+		} else {
+			executor, err = executorPkg.New(cfg.RepositoryType, gitConfig.Path, gitConfig.Submodules)
+		}
 		if err != nil {
 			logrus.Error(err)
 			os.Exit(1)
@@ -98,16 +105,22 @@ var runCmd = &cobra.Command{
 			lastDeployment = ld
 			metrics.SetDeploymentInfo(git.SelectedCommitId, ld.Status)
 		}
-		repository, err := repository.New(gitConfig, mainCommitId, metrics)
-		if err != nil {
-			logrus.Errorf("Failed to initialize the repository: %s", err)
-			os.Exit(1)
+		var sourceFetcher fetcher.Fetcher
+		remotes := cfg.Remotes
+		if cfg.Niks3 != nil {
+			sourceFetcher = fetcher.NewNiks3Fetcher(*cfg.Niks3, broker)
+			remotes = []types.Remote{{Name: "niks3", Poller: cfg.Niks3.Poller}}
+			gitConfig.Path, gitConfig.Dir = "", ""
+		} else {
+			repo, err := repository.New(gitConfig, mainCommitId, metrics)
+			if err != nil {
+				logrus.Fatalf("Failed to initialize the repository: %s", err)
+			}
+			sourceFetcher = fetcher.NewGitFetcher(repo, broker)
 		}
 
-		fetcher := fetcher.NewGitFetcher(repository, broker)
-		fetcher.Start(cmd.Context())
+		sourceFetcher.Start(cmd.Context())
 		sched := scheduler.New()
-		sched.FetchRemotes(fetcher, cfg.Remotes)
 
 		builder := builder.New(store, executor, broker, gitConfig.Path, gitConfig.Dir, cfg.SystemAttr, cfg.Hostname, gitConfig.Submodules, time.Duration(cfg.EvalTimeout)*time.Second, time.Duration(cfg.BuildTimeout)*time.Second)
 		deployer := deployer.New(store, executor.Deploy, lastDeployment, cfg.PostDeploymentCommand, broker)
@@ -133,7 +146,14 @@ var runCmd = &cobra.Command{
 			configurationOperations[r.Name][r.Branches.Main.Name] = r.Branches.Main.Operation
 			configurationOperations[r.Name][r.Branches.Testing.Name] = r.Branches.Testing.Operation
 		}
-		manager := manager.New(store, metrics, sched, fetcher, builder, deployer, machineId, cfg.Hostname, executor, buildConfirmer, deployConfirmer, broker, configurationOperations)
+		if cfg.Niks3 != nil {
+			configurationOperations[cfg.Niks3.URL] = map[string]string{"": cfg.Niks3.Operation}
+		}
+		manager := manager.New(store, metrics, sched, sourceFetcher, builder, deployer, machineId, cfg.Hostname, executor, buildConfirmer, deployConfirmer, broker, configurationOperations)
+		sched.FetchRemotes(sourceFetcher, remotes)
+		if cfg.Niks3 != nil {
+			sourceFetcher.TriggerFetch(nil)
+		}
 
 		http.Serve(manager,
 			metrics,

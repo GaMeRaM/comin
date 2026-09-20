@@ -6,10 +6,10 @@ import (
 	"github.com/dustin/go-humanize"
 	"google.golang.org/protobuf/encoding/protojson"
 
-	"github.com/nlewo/comin/pkg/client"
 	"github.com/nlewo/comin/internal/deployer"
-	pb "github.com/nlewo/comin/pkg/protobuf"
 	store "github.com/nlewo/comin/internal/store"
+	"github.com/nlewo/comin/pkg/client"
+	pb "github.com/nlewo/comin/pkg/protobuf"
 	"github.com/sirupsen/logrus"
 	"github.com/spf13/cobra"
 )
@@ -27,6 +27,12 @@ func longStatus(status *pb.State) {
 		fmt.Printf("  Is suspended: yes\n")
 	}
 	fmt.Printf("  Fetcher\n")
+	if pin := status.Fetcher.GetNiks3Status(); pin != nil {
+		fmt.Printf("    Pin %s\n    Store path %s\n", pin.PinUrl, pin.StorePath)
+		if pin.FetchErrorMsg != "" {
+			fmt.Printf("    Fetch error: %s\n", pin.FetchErrorMsg)
+		}
+	}
 	gitRepoStatus := status.Fetcher.GetGitRepositoryStatus()
 	if gitRepoStatus != nil && gitRepoStatus.SelectedCommitShouldBeSigned.GetValue() {
 		if gitRepoStatus.SelectedCommitSigned.GetValue() {

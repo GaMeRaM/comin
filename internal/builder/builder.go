@@ -164,7 +164,7 @@ func (b *Builder) Stop() {
 }
 
 type Evaluator struct {
-	source     *protobuf.Source
+	source   *protobuf.Source
 	evalFunc executor.EvalFunc
 
 	drvPath   string
@@ -181,6 +181,7 @@ func (r *Evaluator) Run(ctx context.Context) (err error) {
 }
 
 type Buildator struct {
+	outPath   string
 	drvPath   string
 	buildFunc executor.BuildFunc
 	stdout    io.WriteCloser
@@ -188,7 +189,7 @@ type Buildator struct {
 }
 
 func (r *Buildator) Run(ctx context.Context) (err error) {
-	return r.buildFunc(ctx, r.drvPath, r.stdout, r.stderr)
+	return r.buildFunc(ctx, r.drvPath, r.outPath, r.stdout, r.stderr)
 }
 
 // Eval evaluates a generation. It cancels current any generation
@@ -214,10 +215,10 @@ func (b *Builder) Eval(ctx context.Context, generation *protobuf.Generation) err
 	stdout, stderr := b.broker.GetLogger("evaluation", generation.Uuid)
 
 	evaluator := &Evaluator{
-		source:     generation.Source,
+		source:   generation.Source,
 		evalFunc: b.executor.Eval,
-		stdout:     stdout,
-		stderr:     stderr,
+		stdout:   stdout,
+		stderr:   stderr,
 	}
 	b.evaluator = NewExec(evaluator, b.evalTimeout)
 
@@ -246,7 +247,7 @@ func (b *Builder) Eval(ctx context.Context, generation *protobuf.Generation) err
 		}
 
 		b.isEvaluating.Store(false)
-		if b.executor.IsStorePathExist(evaluator.outPath) {
+		if b.evaluator.getErr() == nil && b.executor.IsStorePathExist(evaluator.outPath) {
 			if err := b.store.GenerationBuildStart(generation.Uuid, BuildReasonAlreadyBuilt); err != nil {
 				logrus.Errorf("builder: %s", err)
 			}
@@ -355,6 +356,7 @@ func (b *Builder) build(ctx context.Context, generationUuid string) error {
 	stdout, stderr := b.broker.GetLogger("build", generation.Uuid)
 	buildator := &Buildator{
 		drvPath:   generation.DrvPath,
+		outPath:   generation.OutPath,
 		buildFunc: b.executor.Build,
 		stdout:    stdout,
 		stderr:    stderr,
