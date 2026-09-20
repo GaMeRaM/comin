@@ -5,6 +5,8 @@ import (
 	"fmt"
 	"net/http"
 	"net/http/httptest"
+	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 	"time"
@@ -12,7 +14,51 @@ import (
 	"github.com/nlewo/comin/internal/broker"
 	"github.com/nlewo/comin/internal/types"
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
+
+func TestNiks3NetrcAuthenticationAndRotation(t *testing.T) {
+	password := "first-password"
+	srv := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		user, pass, ok := r.BasicAuth()
+		if !ok || user != "reader" || pass != password {
+			http.Error(w, "denied", http.StatusUnauthorized)
+			return
+		}
+		fmt.Fprint(w, testOutput)
+	}))
+	defer srv.Close()
+	p := filepath.Join(t.TempDir(), "netrc")
+	f := NewNiks3Fetcher(types.Niks3Fetcher{URL: srv.URL, NetrcFile: p, Timeout: 1}, nil)
+	f.client.Transport = srv.Client().Transport
+	_, err := f.fetch(t.Context())
+	require.Error(t, err)
+	for _, pass := range []string{"first-password", "rotated-password"} {
+		password = pass
+		require.NoError(t, os.WriteFile(p, []byte("machine 127.0.0.1 login reader password "+pass), 0600))
+		out, err := f.fetch(t.Context())
+		require.NoError(t, err)
+		assert.Equal(t, testOutput, out)
+	}
+	require.NoError(t, os.WriteFile(p, []byte("machine unrelated.example login reader password private-value"), 0600))
+	_, err = f.fetch(t.Context())
+	require.Error(t, err)
+	assert.NotContains(t, err.Error(), "private-value")
+}
+
+func TestNiks3RedirectCannotLeaveOrigin(t *testing.T) {
+	other := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		t.Error("must not follow the cross-origin redirect")
+	}))
+	defer other.Close()
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		http.Redirect(w, r, other.URL, http.StatusFound)
+	}))
+	defer srv.Close()
+	f := NewNiks3Fetcher(types.Niks3Fetcher{URL: srv.URL, Timeout: 1}, nil)
+	_, err := f.fetch(t.Context())
+	require.ErrorContains(t, err, "original origin")
+}
 
 const testOutput = "/nix/store/0123456789abcdfghijklmnpqrsvwxyz-nixos-system-device"
 

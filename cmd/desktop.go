@@ -4,13 +4,17 @@ import (
 	"context"
 	"fmt"
 	"log"
+	"os"
+	"os/signal"
+	"syscall"
 	"time"
 
 	"github.com/gen2brain/beeep"
 	"github.com/nlewo/comin/internal/builder"
+	"github.com/nlewo/comin/internal/desktop"
+	"github.com/nlewo/comin/internal/store"
 	"github.com/nlewo/comin/pkg/client"
 	"github.com/nlewo/comin/pkg/protobuf"
-	"github.com/nlewo/comin/internal/store"
 	"github.com/sirupsen/logrus"
 	"github.com/spf13/cobra"
 )
@@ -24,6 +28,21 @@ var desktopCmd = &cobra.Command{
 	Run: func(cmd *cobra.Command, args []string) {
 		unixSocketPath, _ := cmd.Flags().GetString("unix-socket-path")
 		title, _ := cmd.Flags().GetString("title")
+		interactive, _ := cmd.Flags().GetBool("interactive")
+		if interactive {
+			c, err := client.New(client.ClientOpts{UnixSocketPath: unixSocketPath})
+			if err != nil {
+				logrus.Fatal(err)
+			}
+			defer c.Close()
+			ctx, stop := signal.NotifyContext(cmd.Context(), os.Interrupt, syscall.SIGTERM)
+			defer stop()
+			if err := desktop.Run(ctx, c, title); err != nil {
+				logrus.Fatal(err)
+			}
+			return
+		}
+
 		if debug {
 			logrus.SetLevel(logrus.DebugLevel)
 		}
@@ -73,7 +92,7 @@ func scenario() {
 	time.Sleep(time.Second)
 
 	d := protobuf.Deployment{
-		Status:    store.StatusToString(store.Init),
+		Status:     store.StatusToString(store.Init),
 		Generation: &g,
 	}
 	e = protobuf.Event{Type: &protobuf.Event_DeploymentStartedType{DeploymentStartedType: &protobuf.Event_DeploymentStarted{Deployment: &d}}}
@@ -81,7 +100,7 @@ func scenario() {
 	time.Sleep(time.Second)
 
 	d = protobuf.Deployment{
-		Status:    store.StatusToString(store.Done),
+		Status:     store.StatusToString(store.Done),
 		Generation: &g,
 	}
 	e = protobuf.Event{Type: &protobuf.Event_DeploymentFinishedType{DeploymentFinishedType: &protobuf.Event_DeploymentFinished{Deployment: &d}}}
@@ -171,6 +190,7 @@ func handler(event *protobuf.Event) error {
 func init() {
 	desktopCmd.Flags().StringVarP(&title, "title", "", "comin", "the notification title")
 	desktopCmd.Flags().StringP("unix-socket-path", "", "/var/lib/comin/grpc.sock", "the GRPC Unix socket path")
+	desktopCmd.Flags().Bool("interactive", false, "show persistent manual installation actions using Freedesktop notifications")
 	desktopCmd.Flags().BoolP("test", "", false, "do not get events from the agent but from predefined scenari")
 	rootCmd.AddCommand(desktopCmd)
 }

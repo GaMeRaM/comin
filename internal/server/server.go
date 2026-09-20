@@ -30,20 +30,24 @@ func (s *cominServer) Events(_ *emptypb.Empty, stream grpc.ServerStreamingServer
 	logrus.Infof("server: start to stream events")
 
 	subscriber := s.broker.Subscribe()
+	defer s.broker.Unsubscribe(subscriber)
 	state := s.manager.GetState()
 	stateEvent := &protobuf.Event{Type: &protobuf.Event_ManagerState_{ManagerState: &protobuf.Event_ManagerState{State: state}}, CreatedAt: timestamppb.New(time.Now().UTC())}
 	if err := stream.Send(stateEvent); err != nil {
 		logrus.Infof("server: failed to send stream: %s", err)
-		s.broker.Unsubscribe(subscriber)
 		return err
 	}
 
 	for {
 
-		event := <-subscriber
+		var event *protobuf.Event
+		select {
+		case <-stream.Context().Done():
+			return nil
+		case event = <-subscriber:
+		}
 		if err := stream.Send(event); err != nil {
 			logrus.Infof("server: failed to send stream: %s", err)
-			s.broker.Unsubscribe(subscriber)
 			return err
 		}
 	}
@@ -90,16 +94,25 @@ func (s *cominServer) Resume(ctx context.Context, empty *emptypb.Empty) (*emptyp
 }
 
 func (s *cominServer) Confirm(ctx context.Context, req *protobuf.ConfirmRequest) (*emptypb.Empty, error) {
+	var err error
 	switch req.For {
 	case "build":
-		s.manager.BuildConfirmer.Confirm(req.GenerationUuid)
+		err = s.manager.BuildConfirmer.ConfirmCurrent(req.GenerationUuid)
 	case "deploy":
-		s.manager.DeployConfirmer.Confirm(req.GenerationUuid)
+		err = s.manager.DeployConfirmer.ConfirmCurrent(req.GenerationUuid)
 	case "all":
-		s.manager.BuildConfirmer.Confirm(req.GenerationUuid)
-		s.manager.DeployConfirmer.Confirm(req.GenerationUuid)
+		buildErr := s.manager.BuildConfirmer.ConfirmCurrent(req.GenerationUuid)
+		deployErr := s.manager.DeployConfirmer.ConfirmCurrent(req.GenerationUuid)
+		if buildErr != nil && deployErr != nil {
+			err = deployErr
+		}
+	default:
+		return nil, status.Error(codes.InvalidArgument, "confirmation scope must be build, deploy or all")
 	}
-	return nil, nil
+	if err != nil {
+		return nil, status.Error(codes.FailedPrecondition, err.Error())
+	}
+	return &emptypb.Empty{}, nil
 }
 
 func (c *cominServer) Start() {

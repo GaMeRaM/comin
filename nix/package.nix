@@ -25,7 +25,7 @@ in
 
 buildGoModule rec {
   pname = "comin";
-  version = "0.14.0-fleet.2";
+  version = "0.14.0-fleet.3";
   nativeCheckInputs = [ git ];
   # We run tests in the go-test derivation to speedup the comin build
   doCheck = false;
@@ -40,7 +40,7 @@ buildGoModule rec {
       ../main.go
     ];
   };
-  vendorHash = "sha256-M+0YUoMRnObCSUqnygPNiv1sKl3YB9Cb4nzK39zWwBg=";
+  vendorHash = "sha256-E+5DChLgBorYrRLfl+Fw0ejXylC4i23N2YHxeHvcgvQ=";
   ldflags = [
     "-X github.com/nlewo/comin/cmd.version=${version}"
   ];

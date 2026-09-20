@@ -8,6 +8,7 @@ import (
 
 type Niks3Fetcher struct {
 	URL       string `yaml:"url"`
+	NetrcFile string `yaml:"netrc_file"`
 	Timeout   int    `yaml:"timeout"`
 	Poller    Poller `yaml:"poller"`
 	Operation string `yaml:"operation"`

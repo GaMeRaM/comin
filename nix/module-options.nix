@@ -49,6 +49,15 @@ in
                 default = 10;
                 description = "Pin request timeout in seconds.";
               };
+              netrc_file = mkOption {
+                type = str;
+                default = "";
+                description = ''
+                  Runtime netrc file for HTTP Basic read authentication. Requires
+                  HTTPS. Use the same file in nix.settings.netrc-file, provisioned
+                  outside the Nix store and readable only by root.
+                '';
+              };
               poller.period = mkOption {
                 type = ints.positive;
                 default = 60;
@@ -410,6 +419,7 @@ in
           };
         };
         desktop = {
+          interactive = mkEnableOption "persistent manual installation actions in desktop notifications";
           enable = mkEnableOption "Whether to run the comin desktop service. This user service send notifications over DBus.";
           title = mkOption {
             type = str;

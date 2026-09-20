@@ -60,6 +60,9 @@ func Read(path string) (config types.Configuration, err error) {
 		if err != nil || u.Host == "" || (u.Scheme != "https" && u.Scheme != "http") || u.User != nil || u.Fragment != "" {
 			return config, fmt.Errorf("niks3.url must be an HTTP(S) pin URL")
 		}
+		if n.NetrcFile != "" && u.Scheme != "https" {
+			return config, fmt.Errorf("niks3.netrc_file requires an HTTPS pin URL")
+		}
 		if n.Timeout == 0 {
 			n.Timeout = 10
 		}

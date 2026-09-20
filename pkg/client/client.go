@@ -3,7 +3,6 @@ package client
 import (
 	"context"
 	"fmt"
-	"io"
 	"time"
 
 	"github.com/nlewo/comin/pkg/protobuf"
@@ -39,7 +38,11 @@ func (c Client) Close() {
 }
 
 func (c Client) GetManagerState() (state *protobuf.State, err error) {
-	return c.cominClient.GetState(context.Background(), &emptypb.Empty{})
+	return c.GetManagerStateContext(context.Background())
+}
+
+func (c Client) GetManagerStateContext(ctx context.Context) (*protobuf.State, error) {
+	return c.cominClient.GetState(ctx, &emptypb.Empty{})
 }
 
 type Streamer struct {
@@ -47,33 +50,42 @@ type Streamer struct {
 	Event      *protobuf.Event
 }
 
-func (c Client) Stream(ctx context.Context) (ch chan Streamer) {
-	ch = make(chan Streamer)
+func (c Client) Stream(ctx context.Context) chan Streamer {
+	ch := make(chan Streamer)
 	go func() {
-		for {
-			events, err := c.cominClient.Events(ctx, &emptypb.Empty{})
-			if err != nil {
-				reason := fmt.Sprintf("failed to connect to the stream: %s", err)
-				logrus.Debug(reason)
-				ch <- Streamer{FailureMsg: reason}
-				time.Sleep(time.Second)
-				continue
+		defer close(ch)
+		send := func(s Streamer) bool {
+			select {
+			case ch <- s:
+				return true
+			case <-ctx.Done():
+				return false
 			}
-			for {
-				event, err := events.Recv()
-				if err == io.EOF {
-					reason := fmt.Sprintf("server closed stream: %s", err)
-					logrus.Debug(reason)
-					ch <- Streamer{FailureMsg: reason}
-					break
+		}
+		for ctx.Err() == nil {
+			events, err := c.cominClient.Events(ctx, &emptypb.Empty{})
+			if err == nil {
+				for {
+					var event *protobuf.Event
+					event, err = events.Recv()
+					if err != nil {
+						break
+					}
+					if !send(Streamer{Event: event}) {
+						return
+					}
 				}
-				if err != nil {
-					reason := fmt.Sprintf("failed to receive from the stream: %s", err)
-					logrus.Debug(reason)
-					ch <- Streamer{FailureMsg: reason}
-					break
-				}
-				ch <- Streamer{Event: event}
+			}
+			if ctx.Err() != nil {
+				return
+			}
+			if !send(Streamer{FailureMsg: fmt.Sprintf("event stream: %s", err)}) {
+				return
+			}
+			select {
+			case <-time.After(time.Second):
+			case <-ctx.Done():
+				return
 			}
 		}
 	}()
@@ -97,7 +109,11 @@ func (c Client) DeploymentLatestSubmit(operation string) error {
 }
 
 func (c Client) Confirm(generationUUID, for_ string) error {
-	_, err := c.cominClient.Confirm(context.Background(), &protobuf.ConfirmRequest{
+	return c.ConfirmContext(context.Background(), generationUUID, for_)
+}
+
+func (c Client) ConfirmContext(ctx context.Context, generationUUID, for_ string) error {
+	_, err := c.cominClient.Confirm(ctx, &protobuf.ConfirmRequest{
 		GenerationUuid: generationUUID, For: for_})
 	return err
 }

@@ -14,6 +14,8 @@ func TestNiks3Config(t *testing.T) {
 		valid        bool
 	}{
 		{"defaults", "niks3:\n  url: https://cache.example/pins/device", true},
+		{"HTTPS authentication", "niks3:\n  url: https://cache.example/pins/device\n  netrc_file: /run/secrets/cache.netrc", true},
+		{"plaintext authentication", "niks3:\n  url: http://cache.example/pins/device\n  netrc_file: /run/secrets/cache.netrc", false},
 		{"mixed sources", "remotes: [{name: origin}]\nniks3:\n  url: https://cache.example/pins/device", false},
 		{"empty URL", "niks3: {}", false},
 		{"local file", "niks3:\n  url: file:///pin", false},

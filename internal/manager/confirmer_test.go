@@ -171,3 +171,23 @@ func TestConfirmerConfirmBeforeSubmit(t *testing.T) {
 		assert.True(ct, expectedUuid.Load())
 	}, 4*time.Second, 100*time.Millisecond)
 }
+
+func TestConfirmCurrentRejectsStaleConsent(t *testing.T) {
+	bk := broker.New()
+	bk.Start()
+	c := NewConfirmer(bk, Manual, 0, "deploy")
+	c.Start()
+	assert.Error(t, c.ConfirmCurrent("b"))
+	c.Submit("c")
+	assert.Error(t, c.ConfirmCurrent("b"))
+	assert.Equal(t, "c", c.status().Submitted)
+	assert.Empty(t, c.status().Confirmed)
+	assert.NoError(t, c.ConfirmCurrent("c"))
+	select {
+	case uuid := <-c.confirmed:
+		assert.Equal(t, "c", uuid)
+	case <-time.After(time.Second):
+		t.Fatal("confirmation missing")
+	}
+	assert.Error(t, c.ConfirmCurrent("c"))
+}

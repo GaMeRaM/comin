@@ -3,6 +3,7 @@ module github.com/nlewo/comin
 go 1.25.0
 
 require (
+	github.com/jdx/go-netrc v1.0.0
 	charm.land/lipgloss/v2 v2.0.2
 	github.com/ProtonMail/go-crypto v1.1.5
 	github.com/charmbracelet/bubbletea v1.3.10

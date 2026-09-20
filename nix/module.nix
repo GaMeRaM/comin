@@ -50,12 +50,37 @@ in
     systemd.user.services.comin-desktop = lib.mkIf cfg.services.comin.desktop.enable {
       wantedBy = [ "graphical-session.target" ];
       path = [ pkgs.libnotify ];
+      after = [ "graphical-session.target" ];
+      partOf = [ "graphical-session.target" ];
       serviceConfig = {
-        ExecStart = ''${lib.getExe package} desktop --title "${cfg.services.comin.desktop.title}"'';
+        ExecStart = lib.escapeShellArgs (
+          [
+            (lib.getExe package)
+            "desktop"
+            "--title"
+            cfg.services.comin.desktop.title
+          ]
+          ++ lib.optional cfg.services.comin.desktop.interactive "--interactive"
+        );
+        Restart = "on-failure";
+        RestartSec = 3;
       };
     };
 
-    environment.systemPackages = [ package ];
+    environment.systemPackages = [
+      package
+    ]
+    ++ lib.optional (cfg.services.comin.desktop.enable && cfg.services.comin.desktop.interactive) (
+      pkgs.makeDesktopItem {
+        name = "comin-updates";
+        desktopName = "System updates";
+        genericName = "Show the downloaded update";
+        exec = "${pkgs.systemd}/bin/systemctl --user restart comin-desktop.service";
+        icon = "system-software-update";
+        categories = [ "System" ];
+        extraConfig."Name[ru]" = "Обновление системы";
+      }
+    );
     networking.firewall.allowedTCPPorts = lib.optional cfg.services.comin.exporter.openFirewall cfg.services.comin.exporter.port;
     # Use package from overlay first, then Flake package if available
     services.comin.package = lib.mkDefault pkgs.comin or self.packages.${system}.comin or null;

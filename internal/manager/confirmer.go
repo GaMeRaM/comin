@@ -71,6 +71,7 @@ func NewConfirmer(broker *broker.Broker, mode Mode, duration time.Duration, reas
 type Command struct {
 	action string
 	uuid   string
+	result chan error
 }
 
 // Mode is immutable after construction. Reading it must not wait for the
@@ -96,6 +97,14 @@ func (c *Confirmer) Confirm(generationUuid string) {
 		action: "confirm",
 		uuid:   generationUuid,
 	}
+}
+
+// ConfirmCurrent rejects stale notification actions inside the same loop
+// that replaces proposals. Unlike Confirm it never queues future consent.
+func (c *Confirmer) ConfirmCurrent(generationUuid string) error {
+	result := make(chan error, 1)
+	c.command <- Command{action: "confirm-current", uuid: generationUuid, result: result}
+	return <-result
 }
 func (c *Confirmer) Cancel() {
 	c.command <- Command{
@@ -143,7 +152,14 @@ func (c *Confirmer) start() {
 				// Notify subscribers that a generation entered the confirmation flow (buffer window started / immediate / not needed)
 				submittedEvent := &protobuf.Event_ConfirmationSubmitted{Mode: modeStr, Uuid: command.uuid}
 				c.broker.Publish(&protobuf.Event{Type: &protobuf.Event_ConfirmationSubmittedType{ConfirmationSubmittedType: submittedEvent}, CreatedAt: timestamppb.New(time.Now().UTC())})
-			case "confirm":
+			case "confirm", "confirm-current":
+				if command.action == "confirm-current" {
+					if command.uuid == "" || command.uuid != c.state.Submitted {
+						command.result <- fmt.Errorf("generation %s is no longer pending", command.uuid)
+						continue
+					}
+					command.result <- nil
+				}
 				logrus.Infof("confirmer: generation %s has been confirmed", command.uuid)
 				c.state.Confirmed = command.uuid
 				e := &protobuf.Event_ConfirmationConfirmed{Uuid: command.uuid}
