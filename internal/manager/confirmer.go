@@ -112,6 +112,12 @@ func (c *Confirmer) Cancel() {
 	}
 }
 
+// Withdraw removes an obsolete proposal, unlike Cancel which only cancels
+// automatic confirmation and leaves the generation available for manual use.
+func (c *Confirmer) Withdraw() {
+	c.command <- Command{action: "withdraw"}
+}
+
 func (c *Confirmer) Start() {
 	go c.start()
 }
@@ -164,7 +170,11 @@ func (c *Confirmer) start() {
 				c.state.Confirmed = command.uuid
 				e := &protobuf.Event_ConfirmationConfirmed{Uuid: command.uuid}
 				c.broker.Publish(&protobuf.Event{Type: &protobuf.Event_ConfirmationConfirmedType{ConfirmationConfirmedType: e}, CreatedAt: timestamppb.New(time.Now().UTC())})
-			case "cancel":
+			case "cancel", "withdraw":
+				if command.action == "withdraw" {
+					command.uuid = c.state.Submitted
+					c.state.Submitted = ""
+				}
 				logrus.Infof("confirmer: confirmation of generation %s has been cancelled", command.uuid)
 				c.state.Confirmed = ""
 				c.state.AutoconfirmStarted = wrapperspb.Bool(false)

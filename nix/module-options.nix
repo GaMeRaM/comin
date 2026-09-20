@@ -37,12 +37,26 @@ in
       services.comin = {
         niks3 = mkOption {
           default = null;
-          description = "Follow one niks3 S3 pin instead of a Git repository (NixOS only).";
+          description = "Follow niks3 main/testing pins instead of a Git repository (NixOS only).";
           type = nullOr (submodule {
             options = {
               url = mkOption {
                 type = str;
                 description = "URL of the plain-text S3 object pins/<channel>; use HTTPS outside isolated tests.";
+              };
+              testing_url = mkOption {
+                type = str;
+                default = "";
+                description = "Optional testing pin URL prefix. Comin appends -<main-store-hash> to its path and prefers that pin over main when it names a different output.";
+              };
+              testing_operation = mkOption {
+                type = enum [
+                  "switch"
+                  "boot"
+                  "test"
+                ];
+                default = "test";
+                description = "Operation after confirmation of a testing release.";
               };
               timeout = mkOption {
                 type = ints.positive;

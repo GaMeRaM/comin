@@ -53,16 +53,17 @@ func TestNiks3SupersedesDownloadAndRetriesSamePin(t *testing.T) {
 	dc.Start()
 	m := &Manager{storage: s, Builder: b, executor: e, BuildConfirmer: bc, DeployConfirmer: dc,
 		deployer: deployer.New(s, nil, nil, "", bk), brokerEvents: bk.Subscribe(),
-		configurationOperations: ConfigurationOperations{"https://cache/pins/device": {"": "switch"}},
+		configurationOperations: ConfigurationOperations{"https://cache/pins/device": {"": "switch", "testing": "test"}},
 	}
 	m.FetchAndBuild(t.Context())
-	publish := func(path string) {
+	publishAs := func(path string, testing bool) {
 		bk.Publish(&protobuf.Event{Type: &protobuf.Event_Fetched_{Fetched: &protobuf.Event_Fetched{
 			Updated: true, Type: &protobuf.Event_Fetched_Niks3Status{Niks3Status: &protobuf.Niks3Status{
-				PinUrl: "https://cache/pins/device", StorePath: path,
+				PinUrl: "https://cache/pins/device", StorePath: path, IsTesting: testing,
 			}},
 		}}})
 	}
+	publish := func(path string) { publishAs(path, false) }
 	receive := func(ch <-chan string, want string) {
 		select {
 		case got := <-ch:
@@ -103,4 +104,20 @@ func TestNiks3SupersedesDownloadAndRetriesSamePin(t *testing.T) {
 	if assert.NotNil(t, g) {
 		assert.Equal(t, readyUUID, g.Uuid)
 	}
+	publishAs("/nix/store/release-t", true)
+	receive(e.started, "/nix/store/release-t")
+	e.finish <- nil
+	assert.Eventually(t, func() bool {
+		p, op, _ := s.PendingDeployment()
+		return p != nil && p.OutPath == "/nix/store/release-t" && op == "test" && dc.status().Submitted == p.Uuid
+	}, time.Second, time.Millisecond)
+	testUUID := dc.status().Submitted
+	publishAs("/nix/store/release-t", false) // same output, now main: must prepare a switch
+	receive(e.started, "/nix/store/release-t")
+	assert.Error(t, dc.ConfirmCurrent(testUUID))
+	e.finish <- nil
+	assert.Eventually(t, func() bool {
+		p, op, _ := s.PendingDeployment()
+		return p != nil && p.OutPath == "/nix/store/release-t" && p.Uuid != testUUID && op == "switch"
+	}, time.Second, time.Millisecond)
 }

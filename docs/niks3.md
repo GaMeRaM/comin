@@ -1,6 +1,6 @@
 # Niks3 pin delivery (NixOS pilot)
 
-This fork adds a single-channel niks3 fetcher, inspired by nlewo/comin's
+This fork adds a main/testing niks3 fetcher, inspired by nlewo/comin's
 `niks3` draft at `153f466f8b52d6add4f76426da401a31bfa33648`.
 The implementation targets niks3 v1.11's actual S3 pin format: one plain-text
 store output path. It does not require credentials for the management API.
@@ -20,7 +20,7 @@ systemd.tmpfiles.rules = [
 Configure `nix.settings.substituters` and `trusted-public-keys` for the cache.
 Use HTTPS for the pin endpoint: a cache signature authenticates a store path,
 but does not authenticate channel selection or prevent replay of an old pin.
-The isolated VM test uses HTTP with public fixture keys only.
+The isolated VM test uses private S3 over HTTPS with public fixture keys only.
 
 CI uploads a complete closure with an immutable release pin, then promotes
 the channel with `niks3 pins create <channel> <store-path>`. Serialize channel
@@ -50,7 +50,8 @@ Use an S3 URL with a runtime AWS credentials file shared with Nix:
 
 ```nix
 services.comin.niks3 = {
-  url = "s3://fleet-cache/pins/pilot-device?endpoint=s3.example.org&scheme=https&region=us-east-1&profile=fleet-cache";
+  url = "s3://fleet-cache/pins/main-device?endpoint=s3.example.org&scheme=https&region=us-east-1&profile=fleet-cache";
+  testing_url = "s3://fleet-cache/pins/testing-device?endpoint=s3.example.org&scheme=https&region=us-east-1&profile=fleet-cache";
   aws_credentials_file = "/etc/fleet-cache.aws";
 };
 systemd.services.nix-daemon.environment.AWS_SHARED_CREDENTIALS_FILE = "/etc/fleet-cache.aws";
@@ -75,3 +76,27 @@ comin pin 's3://fleet-cache/pins/pilot-device?endpoint=s3.example.org&profile=fl
 The command prints a single validated output store path. Nix still must verify
 the cache signature when downloading it. A pin selects a release; it does not
 replace artifact signature verification.
+
+## Main and testing
+
+`url` is the main pin. With `testing_url`, Comin also reads that URL with
+`-<main-store-hash>` appended to its path. A different testing output is preferred;
+missing/equal testing selects main. Main is read again before accepting the pair
+to detect publication during the poll. Errors other than a missing key preserve
+the existing proposal. An older base's testing pin cannot shadow a newer main.
+
+Main uses `operation` (default `switch`), testing uses `testing_operation`
+(default `test`). An equal output moving from testing to main still gets a new
+confirmation for `switch`. Withdrawn/replaced testing proposals become invalid;
+offline restarts preserve the selected operation and UUID until newer pins arrive.
+
+Git ancestry stays in the publisher. It must reject non-fast-forward main,
+allow testing resets only above main, ignore testing equal to/below/divergent
+from main, and rebind a still-descendant testing release when main advances.
+Publish testing before main, serialize reconciliation, and resolve current refs
+instead of trusting a finishing job's old commit. Withdrawing a test can overwrite
+its pin with the main path, avoiding dependence on best-effort pin deletion.
+
+This models successfully published Git heads, not live Git refs. A reconcile-only
+CI job (also suitable for a schedule) must observe branch deletion/reset even
+when no new build finishes. No Git or Nix evaluation is needed on devices.

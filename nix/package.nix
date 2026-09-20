@@ -25,7 +25,7 @@ in
 
 buildGoModule rec {
   pname = "comin";
-  version = "0.14.0-fleet.4";
+  version = "0.14.0-fleet.5";
   nativeCheckInputs = [ git ];
   # We run tests in the go-test derivation to speedup the comin build
   doCheck = false;

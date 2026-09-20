@@ -32,7 +32,7 @@ func TestRestorePendingManualDeployment(t *testing.T) {
 				SelectedRemoteName: "origin", SelectedBranchName: "main", SelectedCommitId: "release-b",
 			})
 			if strings.HasPrefix(scenario, "niks3") {
-				g = s.NewNiks3Generation("device", "https://cache/pins/device", "/nix/store/release-b")
+				g = s.NewNiks3Generation("device", "https://cache/pins/device", "/nix/store/release-b", false, "/nix/store/release-b")
 			}
 			assert.NoError(t, s.GenerationEvalFinished(g.Uuid, "drv", "/nix/store/release-b", "device-id", nil))
 			assert.NoError(t, s.GenerationBuildStart(g.Uuid, "test"))

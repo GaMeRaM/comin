@@ -130,13 +130,13 @@ func (s *Store) NewGeneration(hostname, repositoryDir, systemAttr string, rs *pr
 	return
 }
 
-func (s *Store) NewNiks3Generation(hostname, pinURL, outPath string) (g protobuf.Generation) {
+func (s *Store) NewNiks3Generation(hostname, pinURL, outPath string, testing bool, mainPath string) (g protobuf.Generation) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	g = protobuf.Generation{
 		Uuid: uuid.New().String(),
 		Source: &protobuf.Source{Source: &protobuf.Source_Niks3{Niks3: &protobuf.Niks3{
-			Hostname: hostname, PinUrl: pinURL, StorePath: outPath,
+			Hostname: hostname, PinUrl: pinURL, StorePath: outPath, IsTesting: testing, MainStorePath: mainPath,
 		}}},
 		EvalStatus: EvalInit.String(), BuildStatus: BuildInit.String(),
 	}

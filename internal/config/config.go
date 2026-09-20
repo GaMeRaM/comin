@@ -58,6 +58,17 @@ func Read(path string) (config types.Configuration, err error) {
 		if _, err := n.ParseURL(); err != nil {
 			return config, err
 		}
+		if n.TestingURL != "" {
+			if _, err := n.TestingPin("/nix/store/00000000000000000000000000000000-validation"); err != nil {
+				return config, err
+			}
+		}
+		if n.TestingOperation == "" {
+			n.TestingOperation = "test"
+		}
+		if !slices.Contains([]string{"switch", "boot", "test"}, n.TestingOperation) {
+			return config, fmt.Errorf("invalid niks3 testing operation %q", n.TestingOperation)
+		}
 		if n.Timeout == 0 {
 			n.Timeout = 10
 		}

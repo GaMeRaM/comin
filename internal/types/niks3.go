@@ -9,11 +9,29 @@ import (
 
 type Niks3Fetcher struct {
 	URL                string `yaml:"url"`
+	TestingURL         string `yaml:"testing_url"`
+	TestingOperation   string `yaml:"testing_operation"`
 	NetrcFile          string `yaml:"netrc_file"`
 	AWSCredentialsFile string `yaml:"aws_credentials_file"`
 	Timeout            int    `yaml:"timeout"`
 	Poller             Poller `yaml:"poller"`
 	Operation          string `yaml:"operation"`
+}
+
+// Testing pins are scoped to the exact main output, so an older test can never
+// mask a newly published main. Both objects keep niks3's plain store-path format.
+func (n Niks3Fetcher) TestingPin(main string) (Niks3Fetcher, error) {
+	if err := ValidateNiks3Path(main); err != nil {
+		return n, err
+	}
+	u, err := url.Parse(n.TestingURL)
+	if err != nil {
+		return n, err
+	}
+	u.Path += "-" + strings.Split(strings.TrimPrefix(main, "/nix/store/"), "-")[0]
+	n.URL = u.String()
+	_, err = n.ParseURL()
+	return n, err
 }
 
 // ParseURL accepts the same endpoint/profile/region query parameters as Nix's

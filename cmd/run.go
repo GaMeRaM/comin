@@ -148,6 +148,9 @@ var runCmd = &cobra.Command{
 		}
 		if cfg.Niks3 != nil {
 			configurationOperations[cfg.Niks3.URL] = map[string]string{"": cfg.Niks3.Operation}
+			if cfg.Niks3.TestingURL != "" {
+				configurationOperations[cfg.Niks3.URL]["testing"] = cfg.Niks3.TestingOperation
+			}
 		}
 		manager := manager.New(store, metrics, sched, sourceFetcher, builder, deployer, machineId, cfg.Hostname, executor, buildConfirmer, deployConfirmer, broker, configurationOperations)
 		sched.FetchRemotes(sourceFetcher, remotes)

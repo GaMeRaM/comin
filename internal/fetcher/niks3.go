@@ -2,6 +2,7 @@ package fetcher
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"io"
 	"net/http"
@@ -16,6 +17,7 @@ import (
 	awsconfig "github.com/aws/aws-sdk-go-v2/config"
 	"github.com/aws/aws-sdk-go-v2/credentials"
 	"github.com/aws/aws-sdk-go-v2/service/s3"
+	"github.com/aws/smithy-go"
 	"github.com/jdx/go-netrc"
 	"github.com/nlewo/comin/internal/broker"
 	"github.com/nlewo/comin/internal/types"
@@ -25,7 +27,7 @@ import (
 	"google.golang.org/protobuf/types/known/wrapperspb"
 )
 
-// Niks3Fetcher follows one channel. The S3 object pins/<name> contains a
+// Niks3Fetcher follows main and an optional testing channel. pins/<name> contains a
 // plain store path, not the JSON returned by the authenticated management API.
 type Niks3Fetcher struct {
 	config     types.Niks3Fetcher
@@ -35,6 +37,38 @@ type Niks3Fetcher struct {
 	isFetching atomic.Bool
 	mu         sync.RWMutex
 	state      *protobuf.Niks3Status
+}
+
+var errPinMissing = errors.New("pin does not exist")
+
+// Select only a consistent main/testing pair. A missing test means main;
+// authentication, transport and malformed-body errors preserve the last proposal.
+func (f *Niks3Fetcher) selectPin(ctx context.Context) (string, string, bool, error) {
+	main, err := f.fetch(ctx)
+	if err != nil || f.config.TestingURL == "" {
+		return main, main, false, err
+	}
+	testingConfig, err := f.config.TestingPin(main)
+	if err != nil {
+		return "", "", false, err
+	}
+	testingFetcher := NewNiks3Fetcher(testingConfig, nil)
+	testingFetcher.client = f.client
+	testing, err := testingFetcher.fetch(ctx)
+	if err != nil && !errors.Is(err, errPinMissing) {
+		return "", "", false, err
+	}
+	latest, err := f.fetch(ctx)
+	if err != nil {
+		return "", "", false, err
+	}
+	if latest != main {
+		return "", "", false, fmt.Errorf("main changed while reading testing pin; retrying next poll")
+	}
+	if testing != "" && testing != main {
+		return testing, main, true, nil
+	}
+	return main, main, false, nil
 }
 
 func NewNiks3Fetcher(config types.Niks3Fetcher, b *broker.Broker) *Niks3Fetcher {
@@ -143,6 +177,10 @@ func (f *Niks3Fetcher) fetchS3(ctx context.Context, u *url.URL) (io.ReadCloser, 
 		Bucket: aws.String(u.Host), Key: aws.String(strings.TrimPrefix(u.Path, "/")),
 	})
 	if err != nil {
+		var apiError smithy.APIError
+		if errors.As(err, &apiError) && apiError.ErrorCode() == "NoSuchKey" {
+			return nil, errPinMissing
+		}
 		return nil, err
 	}
 	return object.Body, nil
@@ -180,6 +218,9 @@ func (f *Niks3Fetcher) fetchHTTP(ctx context.Context) (io.ReadCloser, error) {
 	}
 	if resp.StatusCode != http.StatusOK {
 		resp.Body.Close()
+		if resp.StatusCode == http.StatusNotFound {
+			return nil, errPinMissing
+		}
 		return nil, fmt.Errorf("pin request: HTTP %d", resp.StatusCode)
 	}
 	return resp.Body, nil
@@ -193,7 +234,7 @@ func (f *Niks3Fetcher) Start(ctx context.Context) {
 				return
 			case <-f.trigger:
 				f.isFetching.Store(true)
-				outPath, err := f.fetch(ctx)
+				outPath, mainPath, testing, err := f.selectPin(ctx)
 				f.mu.Lock()
 				f.state.FetchedAt = timestamppb.Now()
 				f.state.FetchErrorMsg = ""
@@ -201,6 +242,8 @@ func (f *Niks3Fetcher) Start(ctx context.Context) {
 					f.state.FetchErrorMsg = err.Error()
 				} else {
 					f.state.StorePath = outPath
+					f.state.MainStorePath = mainPath
+					f.state.IsTesting = testing
 				}
 				snapshot := proto.CloneOf(f.state)
 				f.mu.Unlock()

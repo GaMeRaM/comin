@@ -138,6 +138,8 @@ message Niks3 {
   string pin_url = 1;
   string store_path = 2;
   string hostname = 3;
+  bool is_testing = 4;
+  string main_store_path = 5;
 }
 
 message Niks3Status {
@@ -145,6 +147,8 @@ message Niks3Status {
   string store_path = 2;
   string fetch_error_msg = 3;
   google.protobuf.Timestamp fetched_at = 4;
+  bool is_testing = 5;
+  string main_store_path = 6;
 }
 
 message Source {

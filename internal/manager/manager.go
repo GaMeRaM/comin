@@ -121,7 +121,9 @@ func (m *Manager) DeploymentLatestSubmit(operation string) error {
 	}
 	// If no operation is provided, use default based on branch type
 	if operation == "" {
-		if latest.Generation.Source != nil && latest.Generation.Source.GetGit() != nil && latest.Generation.Source.GetGit().SelectedBranchIsTesting != nil && latest.Generation.Source.GetGit().SelectedBranchIsTesting.Value {
+		if latest.Generation.Source.GetNiks3() != nil {
+			operation = m.operationForSource(latest.Generation.Source)
+		} else if latest.Generation.Source.GetGit().GetSelectedBranchIsTesting().GetValue() {
 			operation = "test"
 		} else {
 			operation = "switch"
@@ -287,7 +289,7 @@ func (m *Manager) restorePendingDeployment() {
 
 func (m *Manager) operationForSource(source *protobuf.Source) string {
 	if pin := source.GetNiks3(); pin != nil {
-		return m.configurationOperations[pin.PinUrl][""]
+		return m.niks3Operation(pin.PinUrl, pin.IsTesting)
 	}
 	git := source.GetGit()
 	return m.getOperationFromConfigurationOperations(git.GetSelectedRemoteName(), git.GetSelectedBranchName())
@@ -298,7 +300,7 @@ func (m *Manager) pendingSourceMatches(source *protobuf.Source, operation string
 		return false
 	}
 	if pin := source.GetNiks3(); pin != nil {
-		return pin.Hostname == m.Builder.GetHostname() && m.configurationOperations[pin.PinUrl][""] == operation
+		return pin.Hostname == m.Builder.GetHostname() && m.niks3Operation(pin.PinUrl, pin.IsTesting) == operation
 	}
 	git := source.GetGit()
 	return git != nil && git.Hostname == m.Builder.GetHostname() &&
@@ -306,17 +308,40 @@ func (m *Manager) pendingSourceMatches(source *protobuf.Source, operation string
 }
 
 func (m *Manager) superseded(g *protobuf.Generation) bool {
-	return g.Source.GetNiks3() != nil && g.Source.GetNiks3().StorePath != m.niks3Target
+	return g.Source.GetNiks3() != nil && niks3Target(g.Source.GetNiks3().StorePath, g.Source.GetNiks3().IsTesting) != m.niks3Target
+}
+
+func niks3Target(path string, testing bool) string { return fmt.Sprintf("%s:%t", path, testing) }
+
+func (m *Manager) niks3Operation(url string, testing bool) string {
+	branch := ""
+	if testing {
+		branch = "testing"
+	}
+	return m.configurationOperations[url][branch]
 }
 
 func (m *Manager) prepareNiks3(ctx context.Context, pin *protobuf.Niks3Status) {
-	operation := m.configurationOperations[pin.PinUrl][""]
+	operation := m.niks3Operation(pin.PinUrl, pin.IsTesting)
 	if pin.FetchErrorMsg != "" || operation == "" {
 		return
 	}
-	m.niks3Target = pin.StorePath
+	m.niks3Target = niks3Target(pin.StorePath, pin.IsTesting)
+	if pending, _, err := m.storage.PendingDeployment(); err == nil && pending != nil {
+		previous := pending.Source.GetNiks3()
+		if previous != nil && previous.IsTesting && niks3Target(previous.StorePath, true) != m.niks3Target {
+			// A withdrawn/reset test must not remain installable while its
+			// replacement downloads. Transport errors never enter this branch.
+			m.DeployConfirmer.Withdraw()
+			if err := m.storage.ClearPendingDeployment(pending.Uuid); err != nil {
+				logrus.Errorf("manager: cannot withdraw testing proposal: %s", err)
+				return
+			}
+		}
+	}
 	current := m.Builder.State().Generation
 	if current != nil && current.Source.GetNiks3().GetStorePath() == pin.StorePath &&
+		current.Source.GetNiks3().GetIsTesting() == pin.IsTesting &&
 		current.EvalErr == "" && current.BuildErr == "" {
 		return // Includes a suspended download; let Resume continue it.
 	}
@@ -330,7 +355,7 @@ func (m *Manager) prepareNiks3(ctx context.Context, pin *protobuf.Niks3Status) {
 	if last := m.deployer.State().Deployment; last != nil && last.Generation.OutPath == pin.StorePath && last.Operation == operation {
 		return // An already attempted installation needs explicit resubmission.
 	}
-	generation := m.storage.NewNiks3Generation(m.Builder.GetHostname(), pin.PinUrl, pin.StorePath)
+	generation := m.storage.NewNiks3Generation(m.Builder.GetHostname(), pin.PinUrl, pin.StorePath, pin.IsTesting, pin.MainStorePath)
 	if err := m.Builder.Eval(ctx, &generation); err != nil {
 		logrus.Error(err)
 	}
