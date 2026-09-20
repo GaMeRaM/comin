@@ -168,6 +168,7 @@ in
           };
         };
         remotes = mkOption {
+          default = [ ];
           description = "Ordered list of repositories to pull.";
           type = listOf (submodule {
             options = {
