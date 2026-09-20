@@ -191,3 +191,31 @@ func TestConfirmCurrentRejectsStaleConsent(t *testing.T) {
 	}
 	assert.Error(t, c.ConfirmCurrent("c"))
 }
+
+// The manager can withdraw a testing release while an approval is waiting for
+// it. The confirmer must keep processing commands instead of blocking on send.
+func TestWithdrawWhileApprovalAwaitsManager(t *testing.T) {
+	b := broker.New()
+	b.Start()
+	c := NewConfirmer(b, Manual, 0, "deploy")
+	c.Start()
+	c.Submit("old-test")
+	assert.NoError(t, c.ConfirmCurrent("old-test"))
+	withdrawn := make(chan struct{})
+	go func() { c.Withdraw(); close(withdrawn) }()
+	select {
+	case <-withdrawn:
+	case <-time.After(time.Second):
+		t.Fatal("withdrawal deadlocked with an undelivered approval")
+	}
+	assert.Empty(t, c.status().Submitted)
+	c.Submit("main")
+	assert.Error(t, c.ConfirmCurrent("old-test"))
+	assert.NoError(t, c.ConfirmCurrent("main"))
+	select {
+	case uuid := <-c.confirmed:
+		assert.Equal(t, "main", uuid)
+	case <-time.After(time.Second):
+		t.Fatal("main approval was not delivered")
+	}
+}

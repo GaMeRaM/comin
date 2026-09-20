@@ -127,7 +127,17 @@ func (c *Confirmer) start() {
 	var timer <-chan time.Time
 	var notified bool
 	for {
+		var output chan string
+		if !notified && c.state.Submitted != "" && c.state.Confirmed == c.state.Submitted {
+			output = c.confirmed
+		}
 		select {
+		case output <- c.state.Confirmed:
+			notified = true
+			logrus.Infof("confirmer: confirmed generation %s", c.state.Confirmed)
+			c.state.Confirmed = ""
+			c.state.Submitted = ""
+			c.state.AutoconfirmStarted = wrapperspb.Bool(false)
 		case <-c.statusReq:
 			c.statusResp <- proto.CloneOf(c.state)
 		case command := <-c.command:
@@ -188,14 +198,6 @@ func (c *Confirmer) start() {
 			logrus.Infof("confirmer: timer confirmed generation %s", c.state.Submitted)
 			c.state.AutoconfirmStarted = wrapperspb.Bool(false)
 			c.state.Confirmed = c.state.Submitted
-		}
-		if !notified && c.state.Submitted != "" && c.state.Confirmed != "" && c.state.Confirmed == c.state.Submitted {
-			notified = true
-			logrus.Infof("confirmer: confirmed generation %s", c.state.Confirmed)
-			c.confirmed <- c.state.Confirmed
-			c.state.Confirmed = ""
-			c.state.Submitted = ""
-			c.state.AutoconfirmStarted = wrapperspb.Bool(false)
 		}
 	}
 }
