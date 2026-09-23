@@ -14,6 +14,7 @@ option go_package = "github.com/nlewo/comin/pkg/protobuf";
 
 service Comin {
   rpc GetState(google.protobuf.Empty) returns (State) {}
+  rpc Check(google.protobuf.Empty) returns (google.protobuf.Empty) {}
   rpc Fetch(google.protobuf.Empty) returns (google.protobuf.Empty) {}
   rpc Suspend(google.protobuf.Empty) returns (google.protobuf.Empty) {}
   rpc Resume(google.protobuf.Empty) returns (google.protobuf.Empty) {}

@@ -24,6 +24,7 @@ const _ = grpc.SupportPackageIsVersion9
 
 const (
 	Comin_GetState_FullMethodName               = "/protobuf.Comin/GetState"
+	Comin_Check_FullMethodName                  = "/protobuf.Comin/Check"
 	Comin_Fetch_FullMethodName                  = "/protobuf.Comin/Fetch"
 	Comin_Suspend_FullMethodName                = "/protobuf.Comin/Suspend"
 	Comin_Resume_FullMethodName                 = "/protobuf.Comin/Resume"
@@ -37,6 +38,7 @@ const (
 // For semantics around ctx use and closing/ending streaming RPCs, please refer to https://pkg.go.dev/google.golang.org/grpc/?tab=doc#ClientConn.NewStream.
 type CominClient interface {
 	GetState(ctx context.Context, in *emptypb.Empty, opts ...grpc.CallOption) (*State, error)
+	Check(ctx context.Context, in *emptypb.Empty, opts ...grpc.CallOption) (*emptypb.Empty, error)
 	Fetch(ctx context.Context, in *emptypb.Empty, opts ...grpc.CallOption) (*emptypb.Empty, error)
 	Suspend(ctx context.Context, in *emptypb.Empty, opts ...grpc.CallOption) (*emptypb.Empty, error)
 	Resume(ctx context.Context, in *emptypb.Empty, opts ...grpc.CallOption) (*emptypb.Empty, error)
@@ -57,6 +59,16 @@ func (c *cominClient) GetState(ctx context.Context, in *emptypb.Empty, opts ...g
 	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
 	out := new(State)
 	err := c.cc.Invoke(ctx, Comin_GetState_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *cominClient) Check(ctx context.Context, in *emptypb.Empty, opts ...grpc.CallOption) (*emptypb.Empty, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(emptypb.Empty)
+	err := c.cc.Invoke(ctx, Comin_Check_FullMethodName, in, out, cOpts...)
 	if err != nil {
 		return nil, err
 	}
@@ -137,6 +149,7 @@ func (c *cominClient) DeploymentLatestSubmit(ctx context.Context, in *Operation,
 // for forward compatibility.
 type CominServer interface {
 	GetState(context.Context, *emptypb.Empty) (*State, error)
+	Check(context.Context, *emptypb.Empty) (*emptypb.Empty, error)
 	Fetch(context.Context, *emptypb.Empty) (*emptypb.Empty, error)
 	Suspend(context.Context, *emptypb.Empty) (*emptypb.Empty, error)
 	Resume(context.Context, *emptypb.Empty) (*emptypb.Empty, error)
@@ -155,6 +168,9 @@ type UnimplementedCominServer struct{}
 
 func (UnimplementedCominServer) GetState(context.Context, *emptypb.Empty) (*State, error) {
 	return nil, status.Error(codes.Unimplemented, "method GetState not implemented")
+}
+func (UnimplementedCominServer) Check(context.Context, *emptypb.Empty) (*emptypb.Empty, error) {
+	return nil, status.Error(codes.Unimplemented, "method Check not implemented")
 }
 func (UnimplementedCominServer) Fetch(context.Context, *emptypb.Empty) (*emptypb.Empty, error) {
 	return nil, status.Error(codes.Unimplemented, "method Fetch not implemented")
@@ -209,6 +225,24 @@ func _Comin_GetState_Handler(srv interface{}, ctx context.Context, dec func(inte
 	}
 	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
 		return srv.(CominServer).GetState(ctx, req.(*emptypb.Empty))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _Comin_Check_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(emptypb.Empty)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(CominServer).Check(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: Comin_Check_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(CominServer).Check(ctx, req.(*emptypb.Empty))
 	}
 	return interceptor(ctx, in, info, handler)
 }
@@ -324,6 +358,10 @@ var Comin_ServiceDesc = grpc.ServiceDesc{
 		{
 			MethodName: "GetState",
 			Handler:    _Comin_GetState_Handler,
+		},
+		{
+			MethodName: "Check",
+			Handler:    _Comin_Check_Handler,
 		},
 		{
 			MethodName: "Fetch",
