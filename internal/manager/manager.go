@@ -176,7 +176,7 @@ func (m *Manager) FetchAndBuild(ctx context.Context) {
 						continue
 					}
 					if pin := fetched.GetNiks3Status(); pin != nil {
-						m.prepareNiks3(ctx, pin)
+						m.prepareNiks3(ctx, pin, fetched.Prepare)
 						continue
 					}
 					rs := fetched.GetGitRepositoryStatus()
@@ -321,12 +321,17 @@ func (m *Manager) niks3Operation(url string, testing bool) string {
 	return m.configurationOperations[url][branch]
 }
 
-func (m *Manager) prepareNiks3(ctx context.Context, pin *protobuf.Niks3Status) {
+func (m *Manager) prepareNiks3(ctx context.Context, pin *protobuf.Niks3Status, prepare bool) {
 	operation := m.niks3Operation(pin.PinUrl, pin.IsTesting)
 	if pin.FetchErrorMsg != "" || operation == "" {
 		return
 	}
-	m.niks3Target = niks3Target(pin.StorePath, pin.IsTesting)
+	target := niks3Target(pin.StorePath, pin.IsTesting)
+	if m.niks3Target != "" && m.niks3Target != target {
+		// A changed pin cancels an in-progress download, including in manual mode.
+		m.Builder.Stop()
+	}
+	m.niks3Target = target
 	if pending, _, err := m.storage.PendingDeployment(); err == nil && pending != nil {
 		previous := pending.Source.GetNiks3()
 		if previous != nil && previous.IsTesting && niks3Target(previous.StorePath, true) != m.niks3Target {
@@ -338,6 +343,9 @@ func (m *Manager) prepareNiks3(ctx context.Context, pin *protobuf.Niks3Status) {
 				return
 			}
 		}
+	}
+	if !prepare {
+		return
 	}
 	current := m.Builder.State().Generation
 	if current != nil && current.Source.GetNiks3().GetStorePath() == pin.StorePath &&

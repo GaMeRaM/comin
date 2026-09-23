@@ -69,6 +69,8 @@ message Event {
   message Fetched {
     bool updated = 1;
     bool verified = 2;
+    // For niks3, polling may update metadata without downloading the closure.
+    bool prepare = 5;
     oneof Type {
       GitRepositoryStatus gitRepositoryStatus = 3;
       Niks3Status niks3Status = 4;
@@ -149,6 +151,7 @@ message Niks3Status {
   google.protobuf.Timestamp fetched_at = 4;
   bool is_testing = 5;
   string main_store_path = 6;
+  bool manual_download = 7;
 }
 
 message Source {

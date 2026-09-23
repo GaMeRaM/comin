@@ -173,3 +173,34 @@ func TestNiks3ReconcilesUnchangedPinAndReturnsSnapshots(t *testing.T) {
 	snapshot.GetNiks3Status().StorePath = "mutated"
 	assert.Equal(t, testOutput, f.GetState().GetNiks3Status().StorePath)
 }
+
+func TestNiks3ManualDownloadSeparatesCheckFromPreparation(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) { fmt.Fprint(w, testOutput) }))
+	defer srv.Close()
+	b := broker.New()
+	b.Start()
+	defer b.Stop()
+	events := b.Subscribe()
+	f := NewNiks3Fetcher(types.Niks3Fetcher{URL: srv.URL, Timeout: 1, ManualDownload: true}, b)
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	f.Start(ctx)
+	f.TriggerCheck(nil)
+	select {
+	case e := <-events:
+		assert.True(t, e.GetFetched().Updated)
+		assert.False(t, e.GetFetched().Prepare)
+		assert.Equal(t, testOutput, e.GetFetched().GetNiks3Status().StorePath)
+		assert.True(t, e.GetFetched().GetNiks3Status().ManualDownload)
+	case <-time.After(time.Second):
+		t.Fatal("metadata event missing")
+	}
+	f.TriggerFetch(nil)
+	select {
+	case e := <-events:
+		assert.True(t, e.GetFetched().Prepare)
+		assert.Equal(t, testOutput, e.GetFetched().GetNiks3Status().StorePath)
+	case <-time.After(time.Second):
+		t.Fatal("preparation event missing")
+	}
+}

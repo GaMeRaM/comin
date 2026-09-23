@@ -58,7 +58,7 @@ func TestNiks3SupersedesDownloadAndRetriesSamePin(t *testing.T) {
 	m.FetchAndBuild(t.Context())
 	publishAs := func(path string, testing bool) {
 		bk.Publish(&protobuf.Event{Type: &protobuf.Event_Fetched_{Fetched: &protobuf.Event_Fetched{
-			Updated: true, Type: &protobuf.Event_Fetched_Niks3Status{Niks3Status: &protobuf.Niks3Status{
+			Updated: true, Prepare: true, Type: &protobuf.Event_Fetched_Niks3Status{Niks3Status: &protobuf.Niks3Status{
 				PinUrl: "https://cache/pins/device", StorePath: path, IsTesting: testing,
 			}},
 		}}})
@@ -72,6 +72,13 @@ func TestNiks3SupersedesDownloadAndRetriesSamePin(t *testing.T) {
 			t.Fatal("download did not progress")
 		}
 	}
+	bk.Publish(&protobuf.Event{Type: &protobuf.Event_Fetched_{Fetched: &protobuf.Event_Fetched{
+		Updated: true, Type: &protobuf.Event_Fetched_Niks3Status{Niks3Status: &protobuf.Niks3Status{
+			PinUrl: "https://cache/pins/device", StorePath: "/nix/store/release-b",
+		}},
+	}}})
+	assert.Never(t, func() bool { return b.State().IsBuilding.GetValue() }, 50*time.Millisecond, time.Millisecond,
+		"metadata polling must not start a download")
 	publish("/nix/store/release-b")
 	receive(e.started, "/nix/store/release-b")
 	publish("/nix/store/release-c")

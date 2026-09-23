@@ -31,6 +31,7 @@ type screen struct {
 	id         uint32
 	uuid       string
 	dismissed  string
+	available  string
 	lastResult string
 	russian    bool
 }
@@ -67,6 +68,31 @@ func (s *screen) close() {
 func (s *screen) render(state *protobuf.State) error {
 	g := pending(state)
 	if g == nil {
+		if pin := state.GetFetcher().GetNiks3Status(); pin != nil && pin.ManualDownload && pin.StorePath != "" &&
+			pin.FetchErrorMsg == "" && !state.GetBuilder().GetIsBuilding().GetValue() &&
+			!state.GetDeployer().GetIsDeploying().GetValue() {
+			current, _ := os.Readlink("/run/current-system")
+			if pin.StorePath != current {
+				if pin.StorePath == s.available {
+					if s.uuid != "" {
+						s.close()
+					}
+					return nil
+				}
+				s.close()
+				body := s.text("Update available. Open CityScanner Maintenance to download it when convenient.",
+					"Доступно обновление. Откройте «Обслуживание CityScanner», чтобы скачать его в удобное время.")
+				id, err := s.notifier.SendNotification(notify.Notification{
+					AppName: "comin", AppIcon: "system-software-update", Summary: s.title,
+					Body:          html.EscapeString(body + "\n" + filepath.Base(pin.StorePath)),
+					ExpireTimeout: notify.ExpireTimeoutSetByNotificationServer,
+				})
+				if err == nil {
+					s.id, s.available = id, pin.StorePath
+				}
+				return err
+			}
+		}
 		s.close()
 		d := state.GetDeployer().GetDeployment()
 		if d == nil {
@@ -244,6 +270,7 @@ func Run(ctx context.Context, c client.Client, title string) error {
 		case signal := <-owners:
 			if signal.Name == "org.freedesktop.DBus.NameOwnerChanged" {
 				s.id, s.uuid = 0, ""
+				s.available = ""
 				err = s.refresh(ctx)
 			}
 		case <-ticker.C:

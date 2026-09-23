@@ -9,6 +9,7 @@ import (
 type Fetcher interface {
 	Start(context.Context)
 	TriggerFetch([]string)
+	TriggerCheck([]string)
 	IsFetching() bool
 	GetState() *protobuf.Fetcher
 }

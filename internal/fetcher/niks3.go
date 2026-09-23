@@ -30,13 +30,14 @@ import (
 // Niks3Fetcher follows main and an optional testing channel. pins/<name> contains a
 // plain store path, not the JSON returned by the authenticated management API.
 type Niks3Fetcher struct {
-	config     types.Niks3Fetcher
-	broker     *broker.Broker
-	client     *http.Client
-	trigger    chan struct{}
-	isFetching atomic.Bool
-	mu         sync.RWMutex
-	state      *protobuf.Niks3Status
+	config           types.Niks3Fetcher
+	broker           *broker.Broker
+	client           *http.Client
+	trigger          chan struct{}
+	prepareRequested atomic.Bool
+	isFetching       atomic.Bool
+	mu               sync.RWMutex
+	state            *protobuf.Niks3Status
 }
 
 var errPinMissing = errors.New("pin does not exist")
@@ -86,13 +87,26 @@ func NewNiks3Fetcher(config types.Niks3Fetcher, b *broker.Broker) *Niks3Fetcher 
 			},
 		},
 		trigger: make(chan struct{}, 1),
-		state:   &protobuf.Niks3Status{PinUrl: config.URL},
+		state:   &protobuf.Niks3Status{PinUrl: config.URL, ManualDownload: config.ManualDownload},
 	}
 }
 
 func (f *Niks3Fetcher) IsFetching() bool { return f.isFetching.Load() }
 
 func (f *Niks3Fetcher) TriggerFetch(_ []string) {
+	f.prepareRequested.Store(true)
+	f.enqueue()
+}
+
+func (f *Niks3Fetcher) TriggerCheck(_ []string) {
+	if !f.config.ManualDownload {
+		f.TriggerFetch(nil)
+		return
+	}
+	f.enqueue()
+}
+
+func (f *Niks3Fetcher) enqueue() {
 	// Coalesce concurrent timer/RPC requests, without blocking the API.
 	select {
 	case f.trigger <- struct{}{}:
@@ -233,6 +247,7 @@ func (f *Niks3Fetcher) Start(ctx context.Context) {
 			case <-ctx.Done():
 				return
 			case <-f.trigger:
+				prepare := f.prepareRequested.Swap(false)
 				f.isFetching.Store(true)
 				outPath, mainPath, testing, err := f.selectPin(ctx)
 				f.mu.Lock()
@@ -254,7 +269,7 @@ func (f *Niks3Fetcher) Start(ctx context.Context) {
 				// verifies cache signatures when realizing the store path.
 				f.broker.Publish(&protobuf.Event{
 					Type: &protobuf.Event_Fetched_{Fetched: &protobuf.Event_Fetched{
-						Type: &protobuf.Event_Fetched_Niks3Status{Niks3Status: snapshot}, Updated: err == nil,
+						Type: &protobuf.Event_Fetched_Niks3Status{Niks3Status: snapshot}, Updated: err == nil, Prepare: prepare && err == nil,
 					}}, CreatedAt: timestamppb.Now(),
 				})
 			}

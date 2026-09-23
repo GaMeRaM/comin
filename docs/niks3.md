@@ -9,7 +9,7 @@ store output path. It does not require credentials for the management API.
 services.comin = {
   enable = true;
   niks3.url = "https://cache.example/pins/device-channel";
-  niks3.manual_fetch = true;
+  niks3.manual_download = true;
   buildConfirmer.mode = "without";
   deployConfirmer.mode = "manual";
 };
@@ -18,12 +18,13 @@ systemd.tmpfiles.rules = [
 ];
 ```
 
-With `manual_fetch = true`, Comin neither polls the pins nor requests them at
-startup. `comin fetch` (or the Fetch RPC used by the operator UI) reads the
-channel and prepares the selected release, including downloading its closure.
-Installation still requires a separate confirmation. An interrupted preparation
-does not restart automatically; run `comin fetch` again when network access is
-convenient. The default `false` retains automatic polling for other deployments.
+With `manual_download = true`, Comin polls the tiny channel pins and reports
+new releases without downloading their closures. `comin fetch` (or the Fetch
+RPC used by the operator UI) reads the channel again and prepares the selected
+release, including downloading its closure. Installation requires a separate
+confirmation. An interrupted preparation does not restart automatically; run
+`comin fetch` again when network access is convenient. The default `false`
+retains automatic preparation for other deployments.
 
 Configure `nix.settings.substituters` and `trusted-public-keys` for the cache.
 Use HTTPS for the pin endpoint: a cache signature authenticates a store path,

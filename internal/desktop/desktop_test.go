@@ -51,6 +51,20 @@ func readyState(uuid string) *protobuf.State {
 	}
 }
 
+func TestAvailableReleaseNotifiesOnceWithoutPreparing(t *testing.T) {
+	path := "/nix/store/0123456789abcdfghijklmnpqrsvwxyz-nixos-system-new"
+	state := &protobuf.State{Fetcher: &protobuf.Fetcher{Status: &protobuf.Fetcher_Niks3Status{
+		Niks3Status: &protobuf.Niks3Status{StorePath: path, ManualDownload: true},
+	}}}
+	n := &fakeNotifier{}
+	s := &screen{notifier: n, title: "CityScanner"}
+	assert.NoError(t, s.render(state))
+	assert.NoError(t, s.render(state))
+	assert.Len(t, n.notes, 1)
+	assert.Contains(t, n.notes[0].Body, "Update available")
+	assert.Empty(t, n.notes[0].Actions)
+}
+
 func TestRestoreAndRefreshPendingNotification(t *testing.T) {
 	a := &fakeAgent{state: readyState("b")}
 	n := &fakeNotifier{}

@@ -42,6 +42,8 @@ func (f *GitFetcher) TriggerFetch(remotes []string) {
 	f.submitRemotes <- remotes
 }
 
+func (f *GitFetcher) TriggerCheck(remotes []string) { f.TriggerFetch(remotes) }
+
 type RemoteState struct {
 	Name      string    `json:"name"`
 	FetchedAt time.Time `json:"fetched_at"`

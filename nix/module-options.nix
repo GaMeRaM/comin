@@ -87,10 +87,10 @@ in
                 default = 60;
                 description = "Channel polling interval in seconds.";
               };
-              manual_fetch = mkOption {
+              manual_download = mkOption {
                 type = bool;
                 default = false;
-                description = "Only fetch pins and prepare a release after an explicit Fetch RPC or comin fetch command. Disable startup and periodic fetching.";
+                description = "Poll pins and report available releases, but download their closures only after an explicit Fetch RPC or comin fetch command.";
               };
               operation = mkOption {
                 type = enum [

@@ -35,7 +35,7 @@ func (s Scheduler) FetchRemotes(fetcher fetcher.Fetcher, remotes []types.Remote)
 				gocron.NewTask(
 					func() {
 						logrus.Debugf("scheduler: running task for remote %s", remote.Name)
-						fetcher.TriggerFetch([]string{remote.Name})
+						fetcher.TriggerCheck([]string{remote.Name})
 					},
 				),
 				gocron.WithSingletonMode(gocron.LimitModeReschedule),
