@@ -153,8 +153,10 @@ var runCmd = &cobra.Command{
 			}
 		}
 		manager := manager.New(store, metrics, sched, sourceFetcher, builder, deployer, machineId, cfg.Hostname, executor, buildConfirmer, deployConfirmer, broker, configurationOperations)
-		sched.FetchRemotes(sourceFetcher, remotes)
-		if cfg.Niks3 != nil {
+		if cfg.Niks3 == nil || !cfg.Niks3.ManualFetch {
+			sched.FetchRemotes(sourceFetcher, remotes)
+		}
+		if cfg.Niks3 != nil && !cfg.Niks3.ManualFetch {
 			sourceFetcher.TriggerFetch(nil)
 		}
 

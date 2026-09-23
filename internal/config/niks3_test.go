@@ -14,6 +14,7 @@ func TestNiks3Config(t *testing.T) {
 		valid        bool
 	}{
 		{"defaults", "niks3:\n  url: https://cache.example/pins/device", true},
+		{"manual fetch", "niks3:\n  url: https://cache.example/pins/device\n  manual_fetch: true", true},
 		{"HTTPS authentication", "niks3:\n  url: https://cache.example/pins/device\n  netrc_file: /run/secrets/cache.netrc", true},
 		{"private S3", "niks3:\n  url: s3://cache/pins/device?endpoint=s3.example&profile=fleet&scheme=https\n  aws_credentials_file: /run/secrets/cache.aws", true},
 		{"S3 requires explicit credential file", "niks3:\n  url: s3://cache/pins/device?endpoint=s3.example", false},
@@ -38,6 +39,7 @@ func TestNiks3Config(t *testing.T) {
 				assert.NoError(t, err)
 				assert.Equal(t, "switch", c.Niks3.Operation)
 				assert.Equal(t, 60, c.Niks3.Poller.Period)
+				assert.Equal(t, tc.name == "manual fetch", c.Niks3.ManualFetch)
 			} else {
 				assert.Error(t, err)
 			}

@@ -15,6 +15,7 @@ type Niks3Fetcher struct {
 	AWSCredentialsFile string `yaml:"aws_credentials_file"`
 	Timeout            int    `yaml:"timeout"`
 	Poller             Poller `yaml:"poller"`
+	ManualFetch        bool   `yaml:"manual_fetch"`
 	Operation          string `yaml:"operation"`
 }
 
