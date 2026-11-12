@@ -23,9 +23,9 @@ func TestNiks3MainTestingSelection(t *testing.T) {
 		if r.URL.Path == "/pins/main-device" {
 			reads++
 			if changeMain && reads%2 == 0 {
-				fmt.Fprint(w, next)
+				_, _ = fmt.Fprint(w, next)
 			} else {
-				fmt.Fprint(w, main)
+				_, _ = fmt.Fprint(w, main)
 			}
 			return
 		}
@@ -34,7 +34,7 @@ func TestNiks3MainTestingSelection(t *testing.T) {
 			return
 		}
 		w.WriteHeader(testingStatus)
-		fmt.Fprint(w, testingBody)
+		_, _ = fmt.Fprint(w, testingBody)
 	}))
 	defer srv.Close()
 	f := NewNiks3Fetcher(types.Niks3Fetcher{URL: srv.URL + "/pins/main-device", TestingURL: srv.URL + "/pins/testing-device", Timeout: 1}, nil)

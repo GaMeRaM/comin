@@ -197,7 +197,7 @@ func Run(ctx context.Context, c client.Client, title string) error {
 	if err != nil {
 		return err
 	}
-	defer conn.Close()
+	defer func() { _ = conn.Close() }()
 	caps, err := notify.GetCapabilities(conn)
 	if err != nil {
 		return err
@@ -227,7 +227,7 @@ func Run(ctx context.Context, c client.Client, title string) error {
 	if err != nil {
 		return err
 	}
-	defer n.Close()
+	defer func() { _ = n.Close() }()
 	s := &screen{api: c, notifier: n, title: title, russian: strings.HasPrefix(os.Getenv("LANG"), "ru")}
 	defer s.close()
 	// A desktop daemon restart invalidates notification IDs. Recover from

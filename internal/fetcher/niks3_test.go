@@ -26,7 +26,7 @@ func TestNiks3S3AuthenticationRotationAndErrors(t *testing.T) {
 		assert.Contains(t, r.Header.Get("Authorization"), "/us-east-1/s3/aws4_request")
 		w.Header().Set("Last-Modified", time.Now().UTC().Format(http.TimeFormat))
 		w.WriteHeader(status)
-		fmt.Fprint(w, body)
+		_, _ = fmt.Fprint(w, body)
 	}))
 	defer srv.Close()
 	p := filepath.Join(t.TempDir(), "credentials")
@@ -65,7 +65,7 @@ func TestNiks3NetrcAuthenticationAndRotation(t *testing.T) {
 			http.Error(w, "denied", http.StatusUnauthorized)
 			return
 		}
-		fmt.Fprint(w, testOutput)
+		_, _ = fmt.Fprint(w, testOutput)
 	}))
 	defer srv.Close()
 	p := filepath.Join(t.TempDir(), "netrc")
@@ -123,7 +123,7 @@ func TestNiks3PinResponse(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 				w.WriteHeader(tc.status)
-				fmt.Fprint(w, tc.body)
+				_, _ = fmt.Fprint(w, tc.body)
 			}))
 			defer srv.Close()
 			f := NewNiks3Fetcher(types.Niks3Fetcher{URL: srv.URL, Timeout: 1}, nil)
@@ -149,7 +149,7 @@ func TestNiks3PinCancellation(t *testing.T) {
 }
 
 func TestNiks3ReconcilesUnchangedPinAndReturnsSnapshots(t *testing.T) {
-	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) { fmt.Fprint(w, testOutput) }))
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) { _, _ = fmt.Fprint(w, testOutput) }))
 	defer srv.Close()
 	b := broker.New()
 	b.Start()
@@ -175,7 +175,7 @@ func TestNiks3ReconcilesUnchangedPinAndReturnsSnapshots(t *testing.T) {
 }
 
 func TestNiks3ManualDownloadSeparatesCheckFromPreparation(t *testing.T) {
-	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) { fmt.Fprint(w, testOutput) }))
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) { _, _ = fmt.Fprint(w, testOutput) }))
 	defer srv.Close()
 	b := broker.New()
 	b.Start()

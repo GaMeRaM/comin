@@ -144,7 +144,7 @@ func (f *Niks3Fetcher) fetch(ctx context.Context) (string, error) {
 	if err != nil {
 		return "", err
 	}
-	defer reader.Close()
+	defer func() { _ = reader.Close() }()
 	const limit = 4096
 	body, err := io.ReadAll(io.LimitReader(reader, limit+1))
 	if err != nil {
@@ -231,7 +231,7 @@ func (f *Niks3Fetcher) fetchHTTP(ctx context.Context) (io.ReadCloser, error) {
 		return nil, err
 	}
 	if resp.StatusCode != http.StatusOK {
-		resp.Body.Close()
+		_ = resp.Body.Close()
 		if resp.StatusCode == http.StatusNotFound {
 			return nil, errPinMissing
 		}

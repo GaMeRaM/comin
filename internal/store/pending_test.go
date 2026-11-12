@@ -23,7 +23,7 @@ func pendingTestStore(t *testing.T) *Store {
 	return s
 }
 
-func pendingTestGeneration(t *testing.T, s *Store, commit string) protobuf.Generation {
+func pendingTestGeneration(t *testing.T, s *Store, commit string) *protobuf.Generation {
 	t.Helper()
 	g := s.NewGeneration("device", ".", "", &protobuf.GitRepositoryStatus{SelectedCommitId: commit}, 0)
 	assert.NoError(t, s.GenerationEvalFinished(g.Uuid, "drv", "/nix/store/"+commit, "", nil))
@@ -31,7 +31,7 @@ func pendingTestGeneration(t *testing.T, s *Store, commit string) protobuf.Gener
 	assert.NoError(t, s.GenerationBuildFinished(g.Uuid, nil))
 	g, err := s.GenerationGet(g.Uuid)
 	assert.NoError(t, err)
-	return g
+	return &g
 }
 
 func TestPendingDeploymentSurvivesRestartAndFailedNewBuild(t *testing.T) {
