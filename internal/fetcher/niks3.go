@@ -269,7 +269,7 @@ func (f *Niks3Fetcher) Start(ctx context.Context) {
 				// verifies cache signatures when realizing the store path.
 				f.broker.Publish(&protobuf.Event{
 					Type: &protobuf.Event_Fetched_{Fetched: &protobuf.Event_Fetched{
-						Type: &protobuf.Event_Fetched_Niks3Status{Niks3Status: snapshot}, Updated: err == nil, Prepare: prepare && err == nil,
+						Type: &protobuf.Event_Fetched_Niks3Status{Niks3Status: snapshot}, Prepare: prepare && err == nil,
 					}}, CreatedAt: timestamppb.Now(),
 				})
 			}

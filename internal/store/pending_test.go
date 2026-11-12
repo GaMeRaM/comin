@@ -1,6 +1,7 @@
 package store
 
 import (
+	"context"
 	"errors"
 	"os"
 	"path/filepath"
@@ -24,7 +25,7 @@ func pendingTestStore(t *testing.T) *Store {
 
 func pendingTestGeneration(t *testing.T, s *Store, commit string) protobuf.Generation {
 	t.Helper()
-	g := s.NewGeneration("device", ".", "", &protobuf.GitRepositoryStatus{SelectedCommitId: commit})
+	g := s.NewGeneration("device", ".", "", &protobuf.GitRepositoryStatus{SelectedCommitId: commit}, 0)
 	assert.NoError(t, s.GenerationEvalFinished(g.Uuid, "drv", "/nix/store/"+commit, "", nil))
 	assert.NoError(t, s.GenerationBuildStart(g.Uuid, "test"))
 	assert.NoError(t, s.GenerationBuildFinished(g.Uuid, nil))
@@ -38,7 +39,7 @@ func TestPendingDeploymentSurvivesRestartAndFailedNewBuild(t *testing.T) {
 	g := pendingTestGeneration(t, s, "release-b")
 	assert.NoError(t, s.SetPendingDeployment(g.Uuid, "switch"))
 	// A newer failed build must not collect the generation awaiting consent.
-	next := s.NewGeneration("device", ".", "", &protobuf.GitRepositoryStatus{SelectedCommitId: "release-c"})
+	next := s.NewGeneration("device", ".", "", &protobuf.GitRepositoryStatus{SelectedCommitId: "release-c"}, 0)
 	assert.NoError(t, s.GenerationEvalStarted(next.Uuid))
 	assert.NoError(t, s.GenerationEvalFinished(next.Uuid, "drv-c", "/nix/store/c", "", nil))
 	assert.NoError(t, s.GenerationBuildStart(next.Uuid, "test"))
@@ -101,7 +102,18 @@ func TestPendingDeploymentWriteFailurePreservesSnapshot(t *testing.T) {
 
 func TestPendingDeploymentRequiresSuccessfulBuild(t *testing.T) {
 	s := pendingTestStore(t)
-	g := s.NewGeneration("device", ".", "", &protobuf.GitRepositoryStatus{})
+	g := s.NewGeneration("device", ".", "", &protobuf.GitRepositoryStatus{}, 0)
 	assert.Error(t, s.SetPendingDeployment(g.Uuid, "switch"))
 	assert.Error(t, s.SetPendingDeployment("unknown", "switch"))
+}
+
+func TestStoppingOldBuildKeepsNewUnevaluatedGeneration(t *testing.T) {
+	s := pendingTestStore(t)
+	old := s.NewGeneration("device", ".", "", &protobuf.GitRepositoryStatus{SelectedCommitId: "old"}, 0)
+	assert.NoError(t, s.GenerationEvalStarted(old.Uuid))
+	assert.NoError(t, s.GenerationEvalFinished(old.Uuid, "drv", "/nix/store/old", "", nil))
+	assert.NoError(t, s.GenerationBuildStart(old.Uuid, "test"))
+	next := s.NewGeneration("device", ".", "", &protobuf.GitRepositoryStatus{SelectedCommitId: "new"}, 0)
+	assert.NoError(t, s.GenerationBuildFinished(old.Uuid, context.Canceled))
+	assert.NoError(t, s.GenerationEvalStarted(next.Uuid))
 }

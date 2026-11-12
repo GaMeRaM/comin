@@ -30,7 +30,7 @@ func TestRestorePendingManualDeployment(t *testing.T) {
 			assert.NoError(t, err)
 			g := s.NewGeneration("device", ".", "", &protobuf.GitRepositoryStatus{
 				SelectedRemoteName: "origin", SelectedBranchName: "main", SelectedCommitId: "release-b",
-			})
+			}, 0)
 			if strings.HasPrefix(scenario, "niks3") {
 				g = s.NewNiks3Generation("device", "https://cache/pins/device", "/nix/store/release-b", false, "/nix/store/release-b")
 			}
@@ -56,7 +56,7 @@ func TestRestorePendingManualDeployment(t *testing.T) {
 			c.Start()
 			m := &Manager{
 				machineId: "device-id", storage: s, executor: e,
-				Builder:  builder.New(s, e, bk, "repo", ".", "", "device", false, time.Second, time.Second),
+				Builder:  builder.New(s, e, bk, "repo", ".", "", "device", false, time.Second, time.Second, 0, time.Second, ""),
 				deployer: deployer.New(s, nil, nil, "", bk), DeployConfirmer: c,
 				configurationOperations: ConfigurationOperations{"origin": {"main": "switch"}},
 			}
@@ -67,7 +67,7 @@ func TestRestorePendingManualDeployment(t *testing.T) {
 				m.configurationOperations = ConfigurationOperations{"https://cache/pins/other": {"": "switch"}}
 			}
 			if scenario == "niks3 changed hostname" {
-				m.Builder = builder.New(s, e, bk, "", "", "", "other", false, time.Second, time.Second)
+				m.Builder = builder.New(s, e, bk, "", "", "", "other", false, time.Second, time.Second, 0, time.Second, "")
 			}
 			if scenario == "different machine" {
 				m.machineId = "other-device"

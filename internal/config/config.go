@@ -108,13 +108,19 @@ func Read(path string) (config types.Configuration, err error) {
 		return config, fmt.Errorf("config: repository type is '%s' while it be one of '%s'", config.RepositoryType, supportedRepositoryTypes)
 	}
 	if config.Grpc.UnixSocketPath == "" {
-		config.Grpc.UnixSocketPath = filepath.Join(config.StateDir, "grpc.sock")
+		config.Grpc.UnixSocketPath = "/run/comin-grpc.sock"
+	}
+	if config.Grpc.UnixSocketMode == "" {
+		config.Grpc.UnixSocketMode = "0770"
 	}
 	if config.EvalTimeout == 0 {
 		config.EvalTimeout = 1800
 	}
 	if config.BuildTimeout == 0 {
 		config.BuildTimeout = 1800
+	}
+	if config.BuildRetryTimer == 0 {
+		config.BuildRetryTimer = 30
 	}
 	logrus.Debugf("Config is '%#v'", config)
 	return

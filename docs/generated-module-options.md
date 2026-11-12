@@ -47,6 +47,28 @@ null or package
 
 
 
+## services\.comin\.buildAttemptsLimit
+
+
+
+Maximum number of build attempts before giving up\. When set to 0,
+comin will retry forever on build failures\.
+
+
+
+*Type:*
+signed integer
+
+
+
+*Default:*
+
+```nix
+0
+```
+
+
+
 ## services\.comin\.buildConfirmer
 
 
@@ -110,6 +132,27 @@ one of “without”, “auto”, “manual”
 
 ```nix
 "without"
+```
+
+
+
+## services\.comin\.buildRetryTimer
+
+
+
+Duration in seconds between each build retry attempt\.
+
+
+
+*Type:*
+signed integer
+
+
+
+*Default:*
+
+```nix
+30
 ```
 
 
@@ -400,6 +443,90 @@ list of string
 
 
 
+## services\.comin\.grpc
+
+
+
+Options for the gRPC server\.
+
+
+
+*Type:*
+submodule
+
+
+
+*Default:*
+
+```nix
+{ }
+```
+
+
+
+## services\.comin\.grpc\.unix_socket_group
+
+
+
+Group owner for the Unix socket\. If empty, no group change is performed\.
+
+
+
+*Type:*
+string
+
+
+
+*Default:*
+
+```nix
+"users"
+```
+
+
+
+## services\.comin\.grpc\.unix_socket_mode
+
+
+
+File permissions for the Unix socket (in octal)\.
+
+
+
+*Type:*
+string
+
+
+
+*Default:*
+
+```nix
+"0770"
+```
+
+
+
+## services\.comin\.grpc\.unix_socket_path
+
+
+
+Path to the Unix socket for gRPC communication\.
+
+
+
+*Type:*
+string
+
+
+
+*Default:*
+
+```nix
+"/run/comin-grpc.sock"
+```
+
+
+
 ## services\.comin\.hostname
 
 
@@ -454,15 +581,52 @@ null
 
 
 
+## services\.comin\.postBuildCommand
+
+
+
+A path to a script executed after each
+build (including builds that are already in the Nix store)\.
+comin provides to the script the same environment variables as
+for the post deployment command, with ` COMIN_PHASE ` set to
+` build `\. The ` COMIN_STATUS ` is one of ` built `, ` failed ` or
+` already built `\.
+
+
+
+*Type:*
+null or absolute path
+
+
+
+*Default:*
+
+```nix
+null
+```
+
+
+
+*Example:*
+
+```nix
+pkgs.writers.writeBash "post-build" "echo $COMIN_GIT_SHA";
+
+```
+
+
+
 ## services\.comin\.postDeploymentCommand
 
 
 
 A path to a script executed after each
 deployment\. comin provides to the script the following
-environment variables: ` COMIN_GIT_SHA `, ` COMIN_GIT_REF `,
-` COMIN_GIT_MSG `, ` COMIN_HOSTNAME `, ` COMIN_FLAKE_URL `,
-` COMIN_GENERATION `, ` COMIN_STATUS ` and ` COMIN_ERROR_MSG `\.
+environment variables: ` COMIN_PHASE ` (set to ` deploy `),
+` COMIN_GIT_SHA `, ` COMIN_GIT_REF `, ` COMIN_GIT_MSG `,
+` COMIN_HOSTNAME `, ` COMIN_GENERATION `, ` COMIN_STATUS `
+(one of ` init `, ` running `, ` done ` or ` failed `) and
+` COMIN_ERROR_MSG `\.
 
 
 

@@ -122,7 +122,7 @@ var runCmd = &cobra.Command{
 		sourceFetcher.Start(cmd.Context())
 		sched := scheduler.New()
 
-		builder := builder.New(store, executor, broker, gitConfig.Path, gitConfig.Dir, cfg.SystemAttr, cfg.Hostname, gitConfig.Submodules, time.Duration(cfg.EvalTimeout)*time.Second, time.Duration(cfg.BuildTimeout)*time.Second)
+		builder := builder.New(store, executor, broker, gitConfig.Path, gitConfig.Dir, cfg.SystemAttr, cfg.Hostname, gitConfig.Submodules, time.Duration(cfg.EvalTimeout)*time.Second, time.Duration(cfg.BuildTimeout)*time.Second, cfg.BuildAttemptsLimit, time.Duration(cfg.BuildRetryTimer)*time.Second, cfg.PostBuildCommand)
 		deployer := deployer.New(store, executor.Deploy, lastDeployment, cfg.PostDeploymentCommand, broker)
 
 		mode, err := manager.ParseMode(cfg.BuildConfirmer.Mode)
@@ -162,8 +162,14 @@ var runCmd = &cobra.Command{
 			metrics,
 			cfg.ApiServer.ListenAddress, cfg.ApiServer.Port,
 			cfg.Exporter.ListenAddress, cfg.Exporter.Port)
-		srv := server.New(broker, manager, cfg.Grpc.UnixSocketPath)
-		srv.Start()
+
+		srv := server.New(broker, manager, cfg.Grpc.UnixSocketPath, cfg.Grpc.UnixSocketMode, cfg.Grpc.UnixSocketGroup)
+		grpcServer, socket, err := srv.Init()
+		if err != nil {
+			logrus.Errorf("GRPC server didn't start because of initialisation error: %s", err)
+		} else {
+			go srv.Start(grpcServer, socket)
+		}
 
 		prometheus.Subscribe(broker, &metrics)
 

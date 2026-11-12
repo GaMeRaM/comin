@@ -55,10 +55,13 @@ func TestConfig(t *testing.T) {
 			Port:          4243,
 		},
 		Grpc: types.Grpc{
-			UnixSocketPath: "/var/lib/comin/grpc.sock",
+			UnixSocketPath:  "/run/comin-grpc.sock",
+			UnixSocketMode:  "0770",
+			UnixSocketGroup: "",
 		},
-		EvalTimeout:  1800,
-		BuildTimeout: 1800,
+		EvalTimeout:     1800,
+		BuildTimeout:    1800,
+		BuildRetryTimer: 30,
 	}
 	config, err := Read(configPath)
 	assert.Nil(t, err)

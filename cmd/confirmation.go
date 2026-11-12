@@ -5,8 +5,8 @@ import (
 	"time"
 
 	"github.com/dustin/go-humanize"
-	"github.com/nlewo/comin/pkg/client"
 	"github.com/nlewo/comin/internal/manager"
+	"github.com/nlewo/comin/pkg/client"
 	"github.com/nlewo/comin/pkg/protobuf"
 	"github.com/sirupsen/logrus"
 	"github.com/spf13/cobra"
@@ -22,7 +22,7 @@ var confirmationAcceptCmd = &cobra.Command{
 	Args:  cobra.MinimumNArgs(0),
 	Run: func(cmd *cobra.Command, args []string) {
 		opts := client.ClientOpts{
-			UnixSocketPath: "/var/lib/comin/grpc.sock",
+			UnixSocketPath: "/run/comin-grpc.sock",
 		}
 		c, err := client.New(opts)
 		if err != nil {
@@ -51,7 +51,7 @@ var confirmationShowCmd = &cobra.Command{
 	Args: cobra.MinimumNArgs(0),
 	Run: func(cmd *cobra.Command, args []string) {
 		opts := client.ClientOpts{
-			UnixSocketPath: "/var/lib/comin/grpc.sock",
+			UnixSocketPath: "/run/comin-grpc.sock",
 		}
 		c, err := client.New(opts)
 		if err != nil {

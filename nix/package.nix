@@ -2,7 +2,7 @@
   lib,
   buildGoModule,
   git,
-  makeWrapper,
+  makeBinaryWrapper,
   writeTextFile,
   withGit ? true,
 }:
@@ -25,7 +25,7 @@ in
 
 buildGoModule rec {
   pname = "comin";
-  version = "0.14.0-fleet.5";
+  version = "0.14.0-fleet.6";
   nativeCheckInputs = [ git ];
   # We run tests in the go-test derivation to speedup the comin build
   doCheck = false;
@@ -44,7 +44,7 @@ buildGoModule rec {
   ldflags = [
     "-X github.com/nlewo/comin/cmd.version=${version}"
   ];
-  nativeBuildInputs = [ makeWrapper ];
+  nativeBuildInputs = [ makeBinaryWrapper ];
   postInstall = lib.optionalString withGit ''
     # This is because Nix needs Git at runtime by the go-git library
     wrapProgram $out/bin/comin --set GIT_CONFIG_SYSTEM ${gitConfigFile} --prefix PATH : ${lib.makeBinPath [ git ]}

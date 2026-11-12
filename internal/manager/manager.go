@@ -55,8 +55,17 @@ type Manager struct {
 
 	isSuspended bool
 
+	// Store the last fetched repository state to detect updates
+	lastFetchedCommitId        string
+	lastFetchedBranchIsTesting *wrapperspb.BoolValue
+
 	broker       *broker.Broker
 	brokerEvents chan *protobuf.Event
+}
+
+func filterEvents(event *protobuf.Event) bool {
+	_, ok := event.Type.(*protobuf.Event_Fetched_)
+	return ok
 }
 
 func New(s *store.Store,
@@ -91,7 +100,7 @@ func New(s *store.Store,
 		DeployConfirmer:         deployConfirmer,
 		broker:                  broker,
 		configurationOperations: configurationOperations,
-		brokerEvents:            broker.Subscribe(),
+		brokerEvents:            broker.SubscribeWithFilter("manager", filterEvents),
 	}
 	return m
 }
@@ -172,17 +181,25 @@ func (m *Manager) FetchAndBuild(ctx context.Context) {
 				return
 			case e := <-m.brokerEvents:
 				if fetched := e.GetFetched(); fetched != nil {
-					if !fetched.Updated {
-						continue
-					}
 					if pin := fetched.GetNiks3Status(); pin != nil {
 						m.prepareNiks3(ctx, pin, fetched.Prepare)
 						continue
 					}
 					rs := fetched.GetGitRepositoryStatus()
+					if rs == nil {
+						continue
+					}
+					updated := m.lastFetchedCommitId != rs.SelectedCommitId ||
+						(m.lastFetchedBranchIsTesting != nil && rs.SelectedBranchIsTesting != nil &&
+							m.lastFetchedBranchIsTesting.GetValue() != rs.SelectedBranchIsTesting.GetValue())
+					if !updated {
+						continue
+					}
+					m.lastFetchedCommitId = rs.SelectedCommitId
+					m.lastFetchedBranchIsTesting = rs.SelectedBranchIsTesting
 					if fetched.Verified {
 						logrus.Infof("manager: a generation is evaluating for commit %s", rs.SelectedCommitId)
-						generation := m.storage.NewGeneration(m.Builder.GetHostname(), m.Builder.GetRepositoryDir(), m.Builder.GetSystemAttr(), rs)
+						generation := m.storage.NewGeneration(m.Builder.GetHostname(), m.Builder.GetRepositoryDir(), m.Builder.GetSystemAttr(), rs, m.Builder.GetBuildAttemptsLimit())
 						err := m.Builder.Eval(ctx, &generation)
 						if err != nil {
 							logrus.Error(err)

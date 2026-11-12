@@ -68,7 +68,7 @@ message Event {
     State state = 1;
   }
   message Fetched {
-    bool updated = 1;
+    reserved 1; // Former updated flag; update detection belongs to the manager.
     bool verified = 2;
     // For niks3, polling may update metadata without downloading the closure.
     bool prepare = 5;
@@ -201,6 +201,8 @@ message Generation {
   google.protobuf.Timestamp build_started_at = 21;
   google.protobuf.Timestamp build_ended_at = 22;
   string build_err = 23;
+  int32 attempt_number = 28;
+  int32 build_attempts_limit = 29;
 }
 
 message Deployment {
@@ -251,6 +253,7 @@ message Builder {
   google.protobuf.BoolValue is_suspended = 5;
   string hostname = 6;
   string repository_path = 7;
+  google.protobuf.Timestamp build_retry_at = 8;
 }
 
 message Confirmer {

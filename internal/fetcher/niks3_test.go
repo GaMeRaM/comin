@@ -154,7 +154,7 @@ func TestNiks3ReconcilesUnchangedPinAndReturnsSnapshots(t *testing.T) {
 	b := broker.New()
 	b.Start()
 	defer b.Stop()
-	events := b.Subscribe()
+	events := b.Subscribe("niks3-test")
 	f := NewNiks3Fetcher(types.Niks3Fetcher{URL: srv.URL, Timeout: 1}, b)
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
@@ -163,7 +163,7 @@ func TestNiks3ReconcilesUnchangedPinAndReturnsSnapshots(t *testing.T) {
 		f.TriggerFetch(nil)
 		select {
 		case e := <-events:
-			assert.True(t, e.GetFetched().Updated)
+			assert.Empty(t, e.GetFetched().GetNiks3Status().FetchErrorMsg)
 			assert.Equal(t, testOutput, e.GetFetched().GetNiks3Status().StorePath)
 		case <-time.After(time.Second):
 			t.Fatal("fetch event missing")
@@ -180,7 +180,7 @@ func TestNiks3ManualDownloadSeparatesCheckFromPreparation(t *testing.T) {
 	b := broker.New()
 	b.Start()
 	defer b.Stop()
-	events := b.Subscribe()
+	events := b.Subscribe("niks3-test")
 	f := NewNiks3Fetcher(types.Niks3Fetcher{URL: srv.URL, Timeout: 1, ManualDownload: true}, b)
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
@@ -188,7 +188,7 @@ func TestNiks3ManualDownloadSeparatesCheckFromPreparation(t *testing.T) {
 	f.TriggerCheck(nil)
 	select {
 	case e := <-events:
-		assert.True(t, e.GetFetched().Updated)
+		assert.Empty(t, e.GetFetched().GetNiks3Status().FetchErrorMsg)
 		assert.False(t, e.GetFetched().Prepare)
 		assert.Equal(t, testOutput, e.GetFetched().GetNiks3Status().StorePath)
 		assert.True(t, e.GetFetched().GetNiks3Status().ManualDownload)
