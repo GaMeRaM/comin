@@ -295,6 +295,35 @@ true
 
 
 
+## services\.comin\.desktop\.interactive
+
+
+
+Whether to enable persistent manual installation actions in desktop notifications\.
+
+
+
+*Type:*
+boolean
+
+
+
+*Default:*
+
+```nix
+false
+```
+
+
+
+*Example:*
+
+```nix
+true
+```
+
+
+
 ## services\.comin\.desktop\.title
 
 
@@ -522,7 +551,7 @@ string
 *Default:*
 
 ```nix
-"/run/comin-grpc.sock"
+"/run/comin/grpc.sock"
 ```
 
 
@@ -578,6 +607,213 @@ null or string
 ```nix
 null
 ```
+
+
+
+## services\.comin\.niks3
+
+
+
+Follow niks3 main/testing pins instead of a Git repository (NixOS only)\.
+
+
+
+*Type:*
+null or (submodule)
+
+
+
+*Default:*
+
+```nix
+null
+```
+
+
+
+## services\.comin\.niks3\.aws_credentials_file
+
+
+
+Runtime AWS credentials file for private s3://bucket/pins/name
+URLs\. Supports endpoint, scheme=https, region and profile query
+parameters\. Provision outside the Nix store\. Set the same file
+as AWS_SHARED_CREDENTIALS_FILE for nix-daemon\.
+
+
+
+*Type:*
+string
+
+
+
+*Default:*
+
+```nix
+""
+```
+
+
+
+## services\.comin\.niks3\.manual_download
+
+
+
+Poll pins and report available releases, but download their closures only after an explicit Fetch RPC or comin fetch command\.
+
+
+
+*Type:*
+boolean
+
+
+
+*Default:*
+
+```nix
+false
+```
+
+
+
+## services\.comin\.niks3\.netrc_file
+
+
+
+Runtime netrc file for HTTP Basic read authentication\. Requires
+HTTPS\. Use the same file in nix\.settings\.netrc-file, provisioned
+outside the Nix store and readable only by root\.
+
+
+
+*Type:*
+string
+
+
+
+*Default:*
+
+```nix
+""
+```
+
+
+
+## services\.comin\.niks3\.operation
+
+
+
+Operation after deployment confirmation\.
+
+
+
+*Type:*
+one of “switch”, “boot”, “test”
+
+
+
+*Default:*
+
+```nix
+"switch"
+```
+
+
+
+## services\.comin\.niks3\.poller\.period
+
+
+
+Channel polling interval in seconds\.
+
+
+
+*Type:*
+positive integer, meaning >0
+
+
+
+*Default:*
+
+```nix
+60
+```
+
+
+
+## services\.comin\.niks3\.testing_operation
+
+
+
+Operation after confirmation of a testing release\.
+
+
+
+*Type:*
+one of “switch”, “boot”, “test”
+
+
+
+*Default:*
+
+```nix
+"test"
+```
+
+
+
+## services\.comin\.niks3\.testing_url
+
+
+
+Optional testing pin URL prefix\. Comin appends -\<main-store-hash> to its path and prefers that pin over main when it names a different output\.
+
+
+
+*Type:*
+string
+
+
+
+*Default:*
+
+```nix
+""
+```
+
+
+
+## services\.comin\.niks3\.timeout
+
+
+
+Pin request timeout in seconds\.
+
+
+
+*Type:*
+positive integer, meaning >0
+
+
+
+*Default:*
+
+```nix
+10
+```
+
+
+
+## services\.comin\.niks3\.url
+
+
+
+URL of the plain-text S3 object pins/\<channel>; use HTTPS outside isolated tests\.
+
+
+
+*Type:*
+string
 
 
 
@@ -662,6 +898,14 @@ Ordered list of repositories to pull\.
 
 *Type:*
 list of (submodule)
+
+
+
+*Default:*
+
+```nix
+[ ]
+```
 
 
 

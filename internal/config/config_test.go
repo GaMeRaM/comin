@@ -55,7 +55,7 @@ func TestConfig(t *testing.T) {
 			Port:          4243,
 		},
 		Grpc: types.Grpc{
-			UnixSocketPath:  "/run/comin-grpc.sock",
+			UnixSocketPath:  "/run/comin/grpc.sock",
 			UnixSocketMode:  "0770",
 			UnixSocketGroup: "",
 		},

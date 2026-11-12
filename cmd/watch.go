@@ -135,7 +135,7 @@ var watchCmd = &cobra.Command{
 			ch = watchScenario()
 		} else {
 			if unixSocketPath == "" {
-				unixSocketPath = "/run/comin-grpc.sock"
+				unixSocketPath = "/run/comin/grpc.sock"
 			}
 			opts := client.ClientOpts{
 				UnixSocketPath: unixSocketPath,

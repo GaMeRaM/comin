@@ -108,7 +108,7 @@ func Read(path string) (config types.Configuration, err error) {
 		return config, fmt.Errorf("config: repository type is '%s' while it be one of '%s'", config.RepositoryType, supportedRepositoryTypes)
 	}
 	if config.Grpc.UnixSocketPath == "" {
-		config.Grpc.UnixSocketPath = "/run/comin-grpc.sock"
+		config.Grpc.UnixSocketPath = "/run/comin/grpc.sock"
 	}
 	if config.Grpc.UnixSocketMode == "" {
 		config.Grpc.UnixSocketMode = "0770"

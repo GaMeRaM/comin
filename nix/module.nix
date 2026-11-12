@@ -109,6 +109,10 @@ in
         GIT_ASKPASS = gitAskpass;
       });
       serviceConfig = {
+        # A stable parent directory lets container clients follow socket renewal.
+        RuntimeDirectory = "comin";
+        RuntimeDirectoryMode = "0755";
+        RuntimeDirectoryPreserve = "yes";
         ExecStart =
           (lib.getExe package)
           + (lib.optionalString cfg.services.comin.debug " --debug ")

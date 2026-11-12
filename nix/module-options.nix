@@ -227,7 +227,7 @@ in
             options = {
               unix_socket_path = mkOption {
                 type = str;
-                default = "/run/comin-grpc.sock";
+                default = "/run/comin/grpc.sock";
                 description = ''
                   Path to the Unix socket for gRPC communication.
                 '';

@@ -6,6 +6,7 @@ import (
 	"net"
 	"os"
 	osutil "os/user"
+	"path/filepath"
 	"strconv"
 	"time"
 
@@ -130,6 +131,9 @@ func (s *cominServer) Confirm(ctx context.Context, req *protobuf.ConfirmRequest)
 }
 
 func (c *cominServer) Init() (*grpc.Server, net.Listener, error) {
+	if err := os.MkdirAll(filepath.Dir(c.unixSocketPath), 0755); err != nil {
+		return nil, nil, fmt.Errorf("server: failed to create socket directory: %w", err)
+	}
 	if _, err := os.Stat(c.unixSocketPath); err == nil {
 		conn, err := net.Dial("unix", c.unixSocketPath)
 		if err == nil {

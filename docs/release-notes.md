@@ -4,6 +4,13 @@ All notable changes to this project will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## [v0.14.0-fleet.6] - 2026-11-12
+
+- Merge upstream through `004a55c`, including build retries, post-build hooks and configurable RPC socket permissions.
+- Preserve manual Niks3 download, persistent exact-generation confirmation, testing/main selection and offline installation.
+- Keep a newly created generation alive while a superseded build finishes.
+- Use `/run/comin/grpc.sock` with a stable parent directory so container clients can reconnect after agent restarts.
+
 ## [v0.14.0] - 2025-07-19
 
 ### Added
